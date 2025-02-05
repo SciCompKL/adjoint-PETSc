@@ -1,0 +1,368 @@
+
+#include "../../include/adjoint_petsc/vec.h"
+#include "../../include/adjoint_petsc/util/petsc_missing.h"
+
+AP_NAMESPACE_START
+
+
+Wrapper createRefType(Real& value, Identifier& identifier) {
+  return Wrapper(value, identifier);
+}
+
+PetscErrorCode createAdjointVec(Vec* vec, FuncCreate create, FuncInit init, PetscInt m, PetscInt M) {
+  PetscCall(create(vec));
+  PetscCall(init(*vec));
+  PetscCall(VecSetSizes(*vec, m, M));
+  PetscCall(VecSet(*vec,0.0));
+  return PETSC_SUCCESS;
+}
+
+struct ADData_SetValues {
+  struct RhsData {
+    PetscInt lhs_pos;
+    Identifier rhs_identifier;
+  };
+
+  std::vector<Identifier> lhs_identifiers;
+  std::vector<PetscInt> lhs_out_positions;
+
+  std::vector<PetscInt> lhs_in_positions;
+  std::vector<RhsData> rhs_data;
+
+  std::vector<int> step_boundaries;
+
+  InsertMode mode;
+
+  Real* adjoint_data;
+  int adjoint_step;
+
+
+  FuncCreate createFunc;
+  FuncInit   initFunc;
+  PetscInt local_size;
+  PetscInt global_size;
+
+  ADData_SetValues(InsertMode m, ADVec vec) : lhs_in_positions(), rhs_data(), mode(m), adjoint_data(), adjoint_step(),
+      createFunc(vec->createFunc), initFunc(vec->initFunc), local_size(), global_size() {
+
+    PetscCallVoid(VecGetLocalSize(vec->vec, & local_size));
+    PetscCallVoid(VecGetSize(vec->vec, & global_size));
+  }
+
+  void addEntries(PetscInt ssize, PetscInt const* list, Number const* values) {
+    step_boundaries.push_back((int)rhs_data.size());
+    for (int i = 0; i < ssize; i += 1) {
+      addEntry(list[i], values[i]);
+    }
+
+    if(Number::getTape().isActive()) {
+      Number::getTape().pushExternalFunction(codi::ExternalFunction<Tape>::create(&step_reverse, this, &no_delete));
+    }
+  }
+
+  void finalize(ADVec vec) {
+    step_boundaries.push_back((int)rhs_data.size());
+
+    // Compute the activity for this operation.
+    Vec activity_vector;
+    VecDuplicate(vec->vec, &activity_vector);
+
+    VecSet(activity_vector, 0.0);
+    std::vector<Real> values(lhs_in_positions.size(), 1.0);
+    VecSetValues(activity_vector, (int)lhs_in_positions.size(), lhs_in_positions.data(), values.data(), ADD_VALUES);
+    VecAssemblyBegin(activity_vector);
+    VecAssemblyEnd(activity_vector);
+
+    int local_size;
+    VecGetLocalSize(activity_vector, &local_size);
+
+    Real* activity_vector_data;
+    Real* vec_data;
+    VecGetArray(activity_vector, &activity_vector_data);
+    VecGetArray(vec->vec, &vec_data);
+
+    Tape& tape = Number::getTape();
+    for(int i = 0; i < local_size; i += 1) {
+      if(0 != activity_vector_data[i]) {
+
+        Wrapper temp = createRefType(vec_data[i], vec->ad_data[i]);
+        if(tape.isActive()) {
+
+          tape.registerExternalFunctionOutput(temp);
+
+          lhs_out_positions.push_back(i);
+          lhs_identifiers.push_back(vec->ad_data[i]);
+        } else {
+          tape.deactivateValue(temp);
+        }
+      }
+    }
+
+    VecRestoreArray(activity_vector, &activity_vector_data);
+    VecRestoreArray(vec->vec, &vec_data);
+
+    if(tape.isActive()) {
+      Number::getTape().pushExternalFunction(codi::ExternalFunction<Tape>::create(&assemble_reverse, this, &ad_delete));
+    } else {
+      delete this;
+    }
+
+    VecDestroy(&activity_vector);
+  }
+
+  static void step_reverse(Tape* tape, void* d, VectorInterface* va) {
+    ADData_SetValues* data = (ADData_SetValues*)d;
+    int ad_vec_size = va->getVectorSize();
+
+    data->adjoint_step -= 1;
+    int from = data->step_boundaries[data->adjoint_step];
+    int to = data->step_boundaries[data->adjoint_step + 1];
+
+    for(int i = from; i < to; i += 1) {
+      va->updateAdjointVec(data->rhs_data[i].rhs_identifier, &data->adjoint_data[data->rhs_data[i].lhs_pos * ad_vec_size]);
+    }
+
+    if(data->adjoint_step == 0) {
+      delete [] (data->adjoint_data);
+    }
+  }
+
+  static void assemble_reverse(Tape* tape, void* d, VectorInterface* va) {
+    ADData_SetValues* data = (ADData_SetValues*)d;
+    int ad_vec_size = va->getVectorSize();
+
+    data->adjoint_step = (int)data->step_boundaries.size() - 1;
+
+    Vec adjoint_vec;
+    createAdjointVec(&adjoint_vec, data->createFunc, data->initFunc, data->local_size * ad_vec_size, data->global_size * ad_vec_size);
+
+    Real* local_data;
+    VecGetArray(adjoint_vec, &local_data);
+
+    for(int i = 0; i < (int)data->lhs_identifiers.size(); i += 1) {
+      va->getAdjointVec(data->lhs_identifiers[i], &local_data[data->lhs_out_positions[i] * ad_vec_size]);
+      va->resetAdjointVec(data->lhs_identifiers[i]);
+    }
+
+    VecRestoreArray(adjoint_vec, &local_data);
+
+    data->adjoint_data = new Real[ad_vec_size * data->lhs_in_positions.size()];
+    if(ad_vec_size == 1) {
+      VecGetValuesNonLocal(adjoint_vec, (int)data->lhs_in_positions.size(), data->lhs_in_positions.data(), data->adjoint_data);
+    } else {
+      std::vector<PetscInt> positions(data->lhs_in_positions.size() * ad_vec_size);
+      for(int i = 0; i < (int)data->lhs_in_positions.size(); i += 1) {
+        for(int dim = 0; dim < ad_vec_size; dim += 1) {
+          positions[i * ad_vec_size + dim] = data->lhs_in_positions[i] + dim;
+        }
+      }
+
+      VecGetValues(adjoint_vec, (int)positions.size(), positions.data(), data->adjoint_data);
+    }
+
+    VecDestroy(&adjoint_vec);
+  }
+
+  static void no_delete(Tape* tape, void* data) {
+    (void)tape;
+    (void)data;
+  }
+
+  static void ad_delete(Tape* tape, void* d) {
+    (void)tape;
+    ADData_SetValues* data = (ADData_SetValues*)d;
+
+    delete data;
+  }
+
+
+  private:
+  void addEntry(PetscInt lhs_pos, Number const& rhs_value) {
+    PetscInt lhs_cache_pos = insertLhsPos(lhs_pos);
+
+    rhs_data.push_back({lhs_cache_pos, rhs_value.getIdentifier()});
+  }
+
+  PetscInt insertLhsPos(PetscInt lhs_pos) {
+    // Search for the position.
+    for(size_t i = 0; i < lhs_in_positions.size(); i += 1) {
+      if(lhs_pos == lhs_in_positions[i]) {
+        return i;
+      }
+    }
+
+    // Did not find the position add it.
+    lhs_in_positions.push_back(lhs_pos);
+
+    return (PetscInt)lhs_in_positions.size() - 1;
+  }
+};
+
+void ADVecCreateADData(ADVec vec) {
+
+  if(nullptr != vec->vec) {
+
+    VecGetLocalSize(vec->vec, &vec->ad_size);
+
+    vec->ad_data = new Identifier[vec->ad_size];
+    memset(vec->ad_data, 0, vec->ad_size * sizeof(Identifier));
+  }
+  else {
+    vec->ad_data = nullptr;
+    vec->ad_size = 0;
+  }
+}
+
+PetscErrorCode VecCreate(MPI_Comm comm, ADVec* vec) {
+  *vec = new ADVecImpl();
+
+  PetscCall(VecCreate(comm, &(*vec)->vec));
+  (*vec)->createFunc = [comm] (Vec* v) -> PetscErrorCode {
+    PetscCall(VecCreate(comm, v)); return PETSC_SUCCESS;
+  };
+
+  return PETSC_SUCCESS;
+}
+
+PetscErrorCode VecSetFromOptions(ADVec vec) {
+  PetscCall(VecSetFromOptions(vec->vec));
+  vec->initFunc = [] (Vec v) -> PetscErrorCode {
+    PetscCall(VecSetFromOptions(v)); return PETSC_SUCCESS;
+  };
+
+  return PETSC_SUCCESS;
+}
+
+PetscErrorCode VecSetType(ADVec vec, VecType newType) {
+  PetscCall(VecSetType(vec->vec, newType));
+  vec->initFunc = [newType] (Vec v) -> PetscErrorCode {
+    PetscCall(VecSetType(v, newType)); return PETSC_SUCCESS;
+  };
+
+  return PETSC_SUCCESS;
+}
+
+PetscErrorCode VecSetValues(ADVec vec, PetscInt ni, PetscInt const* ix, Number const* y, InsertMode iora) {
+
+  std::vector<Real> y_conv(ni);
+  for(PetscInt i = 0; i < ni; i += 1) {
+    y_conv[i] = y[i].getValue();
+  }
+
+  PetscErrorCode r = VecSetValues(vec->vec, ni, ix, y_conv.data(), iora);
+
+  ADData_SetValues* data = nullptr;
+  if(nullptr == vec->transaction_data) {
+    data = new ADData_SetValues(iora, vec);
+    vec->transaction_data = data;
+  }
+  else {
+    data = (ADData_SetValues*)vec->transaction_data;
+  }
+
+  data->addEntries(ni, ix, y);
+
+  return r;
+}
+
+PetscErrorCode VecSetValue(ADVec vec, PetscInt i, Number y, InsertMode iora) {
+  return VecSetValues(vec, 1, &i, &y, iora);
+}
+
+PetscErrorCode VecAssemblyBegin(ADVec vec) {
+  if (nullptr != vec) {
+    return VecAssemblyBegin(vec->vec);
+  }
+  else {
+    return PETSC_SUCCESS;
+  }
+}
+
+PetscErrorCode VecAssemblyEnd  (ADVec vec) {
+  if (nullptr != vec) {
+    PetscErrorCode r = VecAssemblyEnd(vec->vec);
+
+    if(nullptr != vec->transaction_data) {
+      ADData_SetValues* data = reinterpret_cast<ADData_SetValues*>(vec->transaction_data);
+
+      data->finalize(vec);
+    }
+
+    return r;
+  }
+  else {
+    return PETSC_SUCCESS;
+  }
+}
+
+PetscErrorCode VecSetSizes(ADVec vec, PetscInt m, PetscInt M) {
+  PetscCall(VecSetSizes(vec->vec, m, M));
+
+  ADVecCreateADData(vec);
+
+  return PETSC_SUCCESS;
+}
+
+PetscErrorCode VecDestroy(ADVec* vec) {
+  delete [] (*vec)->ad_data;
+
+  PetscCall(VecDestroy(&(*vec)->vec));
+
+  delete *vec;
+
+  return PETSC_SUCCESS;
+}
+
+PetscErrorCode VecGetArray(ADVec vec, WrapperArray* a) {
+  Real* primals;
+  PetscCall(VecGetArray(vec->vec, &primals));
+  *a = WrapperArray(primals, vec->ad_data);
+
+  return PETSC_SUCCESS;
+}
+PetscErrorCode VecRestoreArray  (ADVec vec, WrapperArray* a) {
+  Real* primals = a->getValues();
+  PetscCall(VecRestoreArray(vec->vec, &primals));
+
+  return PETSC_SUCCESS;
+}
+
+PetscErrorCode VecDuplicate(ADVec vec, ADVec* newv) {
+  *newv = new ADVecImpl();
+  PetscCall(VecDuplicate(vec->vec, &(*newv)->vec));
+
+  ADVecCreateADData(*newv);
+  (*newv)->createFunc = vec->createFunc;
+  (*newv)->initFunc   = vec->initFunc;
+
+  return PETSC_SUCCESS;
+
+}
+
+PetscErrorCode VecCopy(ADVec x, ADVec y) {
+  Real* x_data;
+  Real* y_data;
+
+  PetscCall(VecGetArray(x->vec, &x_data));
+  PetscCall(VecGetArray(y->vec, &y_data));
+
+  for(PetscInt i = 0; i < x->ad_size; i += 1) {
+    createRefType(y_data[i], y->ad_data[i]) = createRefType(x_data[i], x->ad_data[i]);
+  }
+
+  PetscCall(VecRestoreArray(x->vec, &x_data));
+  PetscCall(VecRestoreArray(y->vec, &y_data));
+
+  return PETSC_SUCCESS;
+}
+
+PetscErrorCode VecView(ADVec vec, PetscViewer viewer) {
+  // TODO: Maybe add special AD output options.
+  return VecView(vec->vec, viewer);
+}
+
+PetscErrorCode VecGetSize(ADVec vec, PetscInt* size) {
+  return VecGetSize(vec->vec, size);
+}
+
+AP_NAMESPACE_END
