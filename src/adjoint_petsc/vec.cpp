@@ -379,7 +379,7 @@ PetscErrorCode VecGetValues(ADVec x, PetscInt ni, PetscInt const* ix, Number* y)
 }
 
 PetscErrorCode VecSet(ADVec x, Number alpha) {
-  // Vec set is purely local operation.
+  // VecSet is purely local operation.
   Real* x_data;
 
   PetscCall(VecGetArray(x->vec, &x_data));
@@ -389,6 +389,24 @@ PetscErrorCode VecSet(ADVec x, Number alpha) {
   }
 
   PetscCall(VecRestoreArray(x->vec, &x_data));
+
+  return PETSC_SUCCESS;
+}
+
+PetscErrorCode VecAXPY(ADVec y, Number alpha, ADVec x) {
+  // VecAXPY is purely local operation.
+  Real* x_data;
+  Real* y_data;
+
+  PetscCall(VecGetArray(x->vec, &x_data));
+  PetscCall(VecGetArray(y->vec, &y_data));
+
+  for(PetscInt i = 0; i < x->ad_size; i += 1) {
+    createRefType(y_data[i], y->ad_data[i]) += alpha * createRefType(x_data[i], x->ad_data[i]);
+  }
+
+  PetscCall(VecRestoreArray(x->vec, &x_data));
+  PetscCall(VecRestoreArray(y->vec, &y_data));
 
   return PETSC_SUCCESS;
 }
