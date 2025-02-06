@@ -598,4 +598,19 @@ PetscErrorCode VecNorm(ADVec x, NormType type, Number* val) {
   return PETSC_SUCCESS;
 }
 
+PetscErrorCode VecScale(ADVec x, Number alpha) {
+  // VecAYPX is purely local operation.
+  Real* x_data;
+
+  PetscCall(VecGetArray(x->vec, &x_data));
+
+  for(PetscInt i = 0; i < x->ad_size; i += 1) {
+    createRefType(x_data[i], x->ad_data[i]) *= alpha;
+  }
+
+  PetscCall(VecRestoreArray(x->vec, &x_data));
+
+  return PETSC_SUCCESS;
+}
+
 AP_NAMESPACE_END

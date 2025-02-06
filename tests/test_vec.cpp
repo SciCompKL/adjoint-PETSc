@@ -422,3 +422,27 @@ TEST_F(VecSetup, VecNorm_1_AND_2) {
     EXPECT_EQ(s[i].getGradient(),  2 * s[i].getValue() * target_1_b + target_0_b);
   }
 }
+
+TEST_F(VecSetup, VecScale) {
+
+  PetscCallVoid(VecSet(vec[0], s[0]));
+
+  PetscCallVoid(VecScale(vec[0], s[2]));
+
+  adjoint_petsc::WrapperArray values = {};
+  PetscCallVoid(VecGetArray(vec[0], &values));
+
+  adjoint_petsc::Real target = s[2].getValue() * s[0].getValue();
+  for(int i = 0; i < ENTRIES_PER_RANK; i += 1) {
+    auto temp = values[i];
+    EXPECT_EQ(target, temp.getValue());
+    tape->registerOutput(temp);
+    temp.setGradient(i + 100 * mpi_rank);
+  }
+  PetscCallVoid(VecRestoreArray(vec[0], &values));
+
+  tape->evaluate();
+
+  EXPECT_EQ(s[0].getGradient(), s[2].getValue() * (1 + 2 + 3 + ENTRIES_PER_RANK * 100 * mpi_rank));
+  EXPECT_EQ(s[2].getGradient(), s[0].getValue() * (1 + 2 + 3 + ENTRIES_PER_RANK * 100 * mpi_rank));
+}

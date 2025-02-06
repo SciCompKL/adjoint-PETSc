@@ -47,6 +47,7 @@ PetscErrorCode VecAYPX          (ADVec y, Number beta, ADVec x);
 PetscErrorCode VecShift         (ADVec v, Number shift);
 PetscErrorCode VecMax           (ADVec x, PetscInt *p, Number *val);
 PetscErrorCode VecNorm          (ADVec x, NormType type, Number *val);
+PetscErrorCode VecScale         (ADVec x, Number alpha);
 
 
 
