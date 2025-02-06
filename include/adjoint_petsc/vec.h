@@ -43,6 +43,7 @@ PetscErrorCode VecGetLocalSize  (ADVec vec, PetscInt* size);
 PetscErrorCode VecGetValues     (ADVec x, PetscInt ni, PetscInt const* ix, Number* y);
 PetscErrorCode VecSet           (ADVec x, Number alpha);
 PetscErrorCode VecAXPY          (ADVec y, Number alpha, ADVec x);
+PetscErrorCode VecAYPX          (ADVec y, Number beta, ADVec x);
 
 
 

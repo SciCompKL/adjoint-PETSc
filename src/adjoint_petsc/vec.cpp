@@ -411,4 +411,22 @@ PetscErrorCode VecAXPY(ADVec y, Number alpha, ADVec x) {
   return PETSC_SUCCESS;
 }
 
+PetscErrorCode VecAYPX(ADVec y, Number beta, ADVec x) {
+  // VecAYPX is purely local operation.
+  Real* x_data;
+  Real* y_data;
+
+  PetscCall(VecGetArray(x->vec, &x_data));
+  PetscCall(VecGetArray(y->vec, &y_data));
+
+  for(PetscInt i = 0; i < x->ad_size; i += 1) {
+    createRefType(y_data[i], y->ad_data[i]) = beta * createRefType(y_data[i], y->ad_data[i]) + createRefType(x_data[i], x->ad_data[i]);
+  }
+
+  PetscCall(VecRestoreArray(x->vec, &x_data));
+  PetscCall(VecRestoreArray(y->vec, &y_data));
+
+  return PETSC_SUCCESS;
+}
+
 AP_NAMESPACE_END
