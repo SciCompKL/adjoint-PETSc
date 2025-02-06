@@ -49,6 +49,7 @@ PetscErrorCode VecMax           (ADVec x, PetscInt *p, Number *val);
 PetscErrorCode VecNorm          (ADVec x, NormType type, Number *val);
 PetscErrorCode VecScale         (ADVec x, Number alpha);
 PetscErrorCode VecPow           (ADVec v, Number p);
+PetscErrorCode VecSum           (ADVec v, Number *sum);
 
 
 

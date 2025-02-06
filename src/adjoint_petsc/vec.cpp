@@ -628,4 +628,43 @@ PetscErrorCode VecPow(ADVec x, Number p) {
   return PETSC_SUCCESS;
 }
 
+struct ADData_VecSum : public ReverseDataBase<ADData_VecSum> {
+  MPI_Comm comm;
+  Identifier val_i;
+
+  std::vector<Identifier> x_i;
+
+  ADData_VecSum(ADVec x, Number* val) : comm(MPI_COMM_NULL), val_i(val->getIdentifier()), x_i(x->ad_size) {
+    PetscCallVoid(PetscObjectGetComm((PetscObject)x->vec, &comm));
+    PetscCallVoid(AdjointVecData::extractIdentifier(x, x_i.data()));
+  }
+
+  void reverse(Tape* tape, VectorInterface* vi) {
+    (void)tape;
+
+    int dim = vi->getVectorSize();
+
+    std::vector<Real> adj(dim);
+
+    vi->getAdjointVec(val_i, adj.data());
+    vi->resetAdjointVec(val_i);
+
+    MPI_Allreduce(MPI_IN_PLACE, adj.data(), dim, MPI_DOUBLE, MPI_SUM, comm);
+
+    for(size_t i = 0; i < x_i.size(); i += 1) {
+      vi->updateAdjointVec(x_i[i], adj.data());
+    }
+  }
+};
+
+PetscErrorCode VecSum(ADVec x, Number* sum) {
+  PetscCall(VecSum(x->vec, &sum->value()));
+
+  Number::getTape().registerExternalFunctionOutput(*sum);
+  ADData_VecSum* data = new ADData_VecSum(x, sum);
+  data->push();
+
+  return PETSC_SUCCESS;
+}
+
 AP_NAMESPACE_END

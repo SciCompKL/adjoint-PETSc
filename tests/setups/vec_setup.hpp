@@ -50,6 +50,15 @@ struct VecSetup : public testing::Test {
     PetscCallVoid(VecSetSizes(*vec, ENTRIES_PER_RANK, ENTRIES_PER_RANK * mpi_size));
   }
 
+  PetscErrorCode setVector(adjoint_petsc::ADVec vec, int size, adjoint_petsc::Number* s) {
+    adjoint_petsc::WrapperArray values = {};
+    PetscCall(VecGetArray(vec, &values));
+    for(int i = 0; i < size; i += 1) { values[i] = s[i]; }
+    PetscCall(VecRestoreArray(vec, &values));
+
+    return PETSC_SUCCESS;
+  }
+
   std::array<adjoint_petsc::ADVec, VECTOR_COUNT> vec;
 
   std::array<adjoint_petsc::Number, VARIABLE_COUNT> s;

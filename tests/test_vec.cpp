@@ -293,25 +293,13 @@ TEST_F(VecSetup, VecMax_PosYes) {
   }
 }
 
-PetscErrorCode computeNorm(adjoint_petsc::ADVec vec, int size, adjoint_petsc::Number* s, NormType type,
-                           adjoint_petsc::Number* val) {
-
-
-
-  adjoint_petsc::WrapperArray values = {};
-  PetscCall(VecGetArray(vec, &values));
-  for(int i = 0; i < size; i += 1) { values[i] = s[i]; }
-  PetscCall(VecRestoreArray(vec, &values));
-
-  return VecNorm(vec, type, val);
-}
-
 TEST_F(VecSetup, VecNorm_1) {
 
   std::array<adjoint_petsc::Number, VARIABLE_COUNT> init = s;
   adjoint_petsc::Number v = {};
   init[0] = -init[0];
-  PetscCallVoid(computeNorm(vec[0], ENTRIES_PER_RANK, s.data(), NORM_1, &v));
+  PetscCallVoid(setVector(vec[0], ENTRIES_PER_RANK, init.data()));
+  PetscCallVoid(VecNorm(vec[0], NORM_1, &v));
 
   EXPECT_EQ(v.getValue(), (1 + 2 + 3 + 4) * mpi_size + (mpi_size - 1) * mpi_size * 10.0 * ENTRIES_PER_RANK / 2.0);
   tape->registerOutput(v);
@@ -334,7 +322,8 @@ TEST_F(VecSetup, VecNorm_2) {
   std::array<adjoint_petsc::Number, VARIABLE_COUNT> init = s;
   adjoint_petsc::Number v = {};
   init[0] = -init[0];
-  PetscCallVoid(computeNorm(vec[0], ENTRIES_PER_RANK, s.data(), NORM_2, &v));
+  PetscCallVoid(setVector(vec[0], ENTRIES_PER_RANK, init.data()));
+  PetscCallVoid(VecNorm(vec[0], NORM_2, &v));
 
   adjoint_petsc::Real target = 0.0;
   for(int i = 0; i < mpi_size; i += 1) {
@@ -364,7 +353,8 @@ TEST_F(VecSetup, VecNorm_MAX) {
   std::array<adjoint_petsc::Number, VARIABLE_COUNT> init = s;
   adjoint_petsc::Number v = {};
   init[0] = -init[0];
-  PetscCallVoid(computeNorm(vec[0], ENTRIES_PER_RANK, s.data(), NORM_MAX, &v));
+  PetscCallVoid(setVector(vec[0], ENTRIES_PER_RANK, init.data()));
+  PetscCallVoid(VecNorm(vec[0], NORM_MAX, &v));
 
   EXPECT_DOUBLE_EQ(v.getValue(), 4.0  + (mpi_size - 1) * 10.0);
   tape->registerOutput(v);
@@ -393,7 +383,8 @@ TEST_F(VecSetup, VecNorm_1_AND_2) {
   std::array<adjoint_petsc::Number, VARIABLE_COUNT> init = s;
   std::array<adjoint_petsc::Number, 2> v = {};
   init[0] = -init[0];
-  PetscCallVoid(computeNorm(vec[0], ENTRIES_PER_RANK, s.data(), NORM_1_AND_2, v.data()));
+  PetscCallVoid(setVector(vec[0], ENTRIES_PER_RANK, init.data()));
+  PetscCallVoid(VecNorm(vec[0], NORM_1_AND_2, v.data()));
 
   adjoint_petsc::Real target = 0.0;
   for(int i = 0; i < mpi_size; i += 1) {
@@ -469,4 +460,29 @@ TEST_F(VecSetup, VecPow) {
 
   EXPECT_EQ(s[0].getGradient(), s[2].getValue() * pow(s[0], (s[2].getValue() - 1.0)) * (1 + 2 + 3 + ENTRIES_PER_RANK * 100 * mpi_rank));
   EXPECT_EQ(s[2].getGradient(), log(s[0].getValue()) * target * (1 + 2 + 3 + ENTRIES_PER_RANK * 100 * mpi_rank));
+}
+
+TEST_F(VecSetup, VecSum) {
+
+  std::array<adjoint_petsc::Number, VARIABLE_COUNT> init = s;
+  adjoint_petsc::Number v = {};
+  init[0] = -init[0];
+  PetscCallVoid(setVector(vec[0], ENTRIES_PER_RANK, init.data()));
+  PetscCallVoid(VecSum(vec[0], &v));
+
+  EXPECT_EQ(v.getValue(), (-1 + 2 + 3 + 4) * mpi_size + (mpi_size - 1) * mpi_size * 10.0 * (ENTRIES_PER_RANK - 2) / 2.0);
+  tape->registerOutput(v);
+  v.setGradient(pow(10.0, mpi_rank));
+
+  tape->evaluate();
+
+  adjoint_petsc::Real target_b = 0.0;
+  for(int i = 0; i < mpi_size; i += 1) {
+    target_b += pow(10.0, i);
+  }
+
+  EXPECT_EQ(s[0].getGradient(),  -target_b);
+  for(int i = 1; i < ENTRIES_PER_RANK; i += 1) {
+    EXPECT_EQ(s[i].getGradient(),  target_b);
+  }
 }
