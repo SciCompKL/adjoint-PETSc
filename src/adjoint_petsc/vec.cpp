@@ -430,7 +430,7 @@ PetscErrorCode VecAYPX(ADVec y, Number beta, ADVec x) {
 }
 
 PetscErrorCode VecShift(ADVec x, Number shift) {
-  // VecAYPX is purely local operation.
+  // VecShift is purely local operation.
   Real* x_data;
 
   PetscCall(VecGetArray(x->vec, &x_data));
@@ -599,13 +599,28 @@ PetscErrorCode VecNorm(ADVec x, NormType type, Number* val) {
 }
 
 PetscErrorCode VecScale(ADVec x, Number alpha) {
-  // VecAYPX is purely local operation.
+  // VecScale is purely local operation.
   Real* x_data;
 
   PetscCall(VecGetArray(x->vec, &x_data));
 
   for(PetscInt i = 0; i < x->ad_size; i += 1) {
     createRefType(x_data[i], x->ad_data[i]) *= alpha;
+  }
+
+  PetscCall(VecRestoreArray(x->vec, &x_data));
+
+  return PETSC_SUCCESS;
+}
+
+PetscErrorCode VecPow(ADVec x, Number p) {
+  // VecPow is purely local operation.
+  Real* x_data;
+
+  PetscCall(VecGetArray(x->vec, &x_data));
+
+  for(PetscInt i = 0; i < x->ad_size; i += 1) {
+    createRefType(x_data[i], x->ad_data[i]) = pow(createRefType(x_data[i], x->ad_data[i]), p);
   }
 
   PetscCall(VecRestoreArray(x->vec, &x_data));
