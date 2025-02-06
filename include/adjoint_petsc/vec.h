@@ -39,6 +39,9 @@ PetscErrorCode VecDuplicate     (ADVec vec, ADVec* newv);
 PetscErrorCode VecCopy          (ADVec x, ADVec y);
 PetscErrorCode VecView          (ADVec vec, PetscViewer viewer);
 PetscErrorCode VecGetSize       (ADVec vec, PetscInt* size);
+PetscErrorCode VecGetLocalSize  (ADVec vec, PetscInt* size);
+PetscErrorCode VecGetValues     (ADVec x, PetscInt ni, PetscInt const* ix, Number* y);
+PetscErrorCode VecSet           (ADVec x, Number alpha);
 
 
 

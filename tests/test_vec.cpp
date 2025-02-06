@@ -107,3 +107,50 @@ TEST_F(VecSetup, VecCopy) {
     EXPECT_EQ(s[i].getGradient(), i + 100 * mpi_rank);
   }
 }
+
+TEST_F(VecSetup, VecGetValues) {
+
+  adjoint_petsc::WrapperArray values = {};
+  PetscCallVoid(VecGetArray(vec[0], &values));
+  for(int i = 0; i < ENTRIES_PER_RANK; i += 1) { values[i] = s[i]; }
+  PetscCallVoid(VecRestoreArray(vec[0], &values));
+
+  std::array<PetscInt, 2> ix = {0, 3};
+  std::array<adjoint_petsc::Number, 2> v = {};
+  PetscCallVoid(VecGetValues(vec[0], 2, ix.data(), v.data()));
+
+  EXPECT_EQ(v[0].getValue(), s[0].getValue());
+  EXPECT_EQ(v[1].getValue(), s[3].getValue());
+
+  for(int i = 0; i < 2; i += 1) {
+    tape->registerOutput(v[i]);
+    v[i].setGradient(i + 100 * mpi_rank);
+  }
+
+  tape->evaluate();
+
+  EXPECT_EQ(s[0].getGradient(), 0 + 100 * mpi_rank);
+  EXPECT_EQ(s[1].getGradient(), 0);
+  EXPECT_EQ(s[2].getGradient(), 0);
+  EXPECT_EQ(s[3].getGradient(), 1 + 100 * mpi_rank);
+}
+
+TEST_F(VecSetup, VecSet) {
+
+  PetscCallVoid(VecSet(vec[0], s[0]));
+
+  adjoint_petsc::WrapperArray values = {};
+  PetscCallVoid(VecGetArray(vec[0], &values));
+
+  for(int i = 0; i < ENTRIES_PER_RANK; i += 1) {
+    auto temp = values[i];
+    EXPECT_EQ(s[0].getValue(), temp.getValue());
+    tape->registerOutput(temp);
+    temp.setGradient(i + 100 * mpi_rank);
+  }
+  PetscCallVoid(VecRestoreArray(vec[0], &values));
+
+  tape->evaluate();
+
+  EXPECT_EQ(s[0].getGradient(), 1 + 2 + 3 + ENTRIES_PER_RANK * 100 * mpi_rank);
+}

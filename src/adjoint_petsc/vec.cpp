@@ -1,13 +1,9 @@
 
 #include "../../include/adjoint_petsc/vec.h"
 #include "../../include/adjoint_petsc/util/petsc_missing.h"
+#include "../../include/adjoint_petsc/util/addata_helper.hpp"
 
 AP_NAMESPACE_START
-
-
-Wrapper createRefType(Real& value, Identifier& identifier) {
-  return Wrapper(value, identifier);
-}
 
 PetscErrorCode createAdjointVec(Vec* vec, FuncCreate create, FuncInit init, PetscInt m, PetscInt M) {
   PetscCall(create(vec));
@@ -363,6 +359,38 @@ PetscErrorCode VecView(ADVec vec, PetscViewer viewer) {
 
 PetscErrorCode VecGetSize(ADVec vec, PetscInt* size) {
   return VecGetSize(vec->vec, size);
+}
+
+PetscErrorCode VecGetLocalSize(ADVec vec, PetscInt* size) {
+  return VecGetLocalSize(vec->vec, size);
+}
+
+PetscErrorCode VecGetValues(ADVec x, PetscInt ni, PetscInt const* ix, Number* y) {
+  Real* values;
+  PetscCall(VecGetArray(x->vec, &values));
+
+  for(PetscInt i = 0; i < ni; i += 1) {
+    y[i] = createRefType(values[ix[i]], x->ad_data[ix[i]]);
+  }
+
+  PetscCall(VecRestoreArray(x->vec, &values));
+
+  return PETSC_SUCCESS;
+}
+
+PetscErrorCode VecSet(ADVec x, Number alpha) {
+  // Vec set is purely local operation.
+  Real* x_data;
+
+  PetscCall(VecGetArray(x->vec, &x_data));
+
+  for(PetscInt i = 0; i < x->ad_size; i += 1) {
+    createRefType(x_data[i], x->ad_data[i]) = alpha;
+  }
+
+  PetscCall(VecRestoreArray(x->vec, &x_data));
+
+  return PETSC_SUCCESS;
 }
 
 AP_NAMESPACE_END

@@ -15,4 +15,9 @@ using ConstWrapper = typename codi::ImmutableActiveType<Number>;
 
 using VectorInterface = typename codi::VectorAccessInterface<Real, Identifier>;
 
+inline Wrapper createRefType(Real& value, Identifier& identifier) {
+  return Wrapper(value, identifier);
+}
+
+
 AP_NAMESPACE_END
