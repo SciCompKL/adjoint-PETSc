@@ -51,6 +51,8 @@ PetscErrorCode VecScale         (ADVec x, Number alpha);
 PetscErrorCode VecPow           (ADVec v, Number p);
 PetscErrorCode VecSum           (ADVec v, Number *sum);
 PetscErrorCode VecDot           (ADVec x, ADVec y, Number *val);
+PetscErrorCode VecPointwiseDivide(ADVec w, ADVec x, ADVec y);
+PetscErrorCode VecPointwiseMult (ADVec w, ADVec x, ADVec y);
 
 
 

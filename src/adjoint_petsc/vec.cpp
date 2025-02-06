@@ -717,4 +717,47 @@ PetscErrorCode VecDot(ADVec x, ADVec y, Number* val) {
   return PETSC_SUCCESS;
 }
 
+PetscErrorCode VecPointwiseDivide(ADVec w, ADVec x, ADVec y) {
+  // VecPointwiseDivide is purely local operation.
+  Real* w_data;
+  Real* x_data;
+  Real* y_data;
+
+  PetscCall(VecGetArray(w->vec, &w_data));
+  PetscCall(VecGetArray(x->vec, &x_data));
+  PetscCall(VecGetArray(y->vec, &y_data));
+
+  for(PetscInt i = 0; i < x->ad_size; i += 1) {
+    createRefType(w_data[i], w->ad_data[i]) = createRefType(x_data[i], x->ad_data[i]) / createRefType(y_data[i], y->ad_data[i]);
+  }
+
+  PetscCall(VecRestoreArray(w->vec, &x_data));
+  PetscCall(VecRestoreArray(x->vec, &x_data));
+  PetscCall(VecRestoreArray(y->vec, &y_data));
+
+  return PETSC_SUCCESS;
+}
+
+PetscErrorCode VecPointwiseMult (ADVec w, ADVec x, ADVec y) {
+  // VecPointwiseMult is purely local operation.
+  Real* w_data;
+  Real* x_data;
+  Real* y_data;
+
+  PetscCall(VecGetArray(w->vec, &w_data));
+  PetscCall(VecGetArray(x->vec, &x_data));
+  PetscCall(VecGetArray(y->vec, &y_data));
+
+  for(PetscInt i = 0; i < x->ad_size; i += 1) {
+    createRefType(w_data[i], w->ad_data[i]) = createRefType(x_data[i], x->ad_data[i]) * createRefType(y_data[i], y->ad_data[i]);
+  }
+
+  PetscCall(VecRestoreArray(w->vec, &x_data));
+  PetscCall(VecRestoreArray(x->vec, &x_data));
+  PetscCall(VecRestoreArray(y->vec, &y_data));
+
+  return PETSC_SUCCESS;
+
+}
+
 AP_NAMESPACE_END

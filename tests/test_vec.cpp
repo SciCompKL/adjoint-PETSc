@@ -508,3 +508,53 @@ TEST_F(VecSetup, VecDot) {
   EXPECT_EQ(s[0].getGradient(), mpi_size * ENTRIES_PER_RANK * s[1].getValue() * 100);
   EXPECT_EQ(s[1].getGradient(), mpi_size * ENTRIES_PER_RANK * s[0].getValue() * 100);
 }
+
+TEST_F(VecSetup, VecPointwiseDevide) {
+
+  PetscCallVoid(VecSet(vec[0], s[0]));
+  PetscCallVoid(VecSet(vec[1], s[1]));
+
+  PetscCallVoid(VecPointwiseDivide(vec[2], vec[0], vec[1]));
+
+  adjoint_petsc::WrapperArray values = {};
+  PetscCallVoid(VecGetArray(vec[2], &values));
+
+  adjoint_petsc::Real target = s[0].getValue() / s[1].getValue();
+  for(int i = 0; i < ENTRIES_PER_RANK; i += 1) {
+    auto temp = values[i];
+    EXPECT_EQ(target, temp.getValue());
+    tape->registerOutput(temp);
+    temp.setGradient(i + 100 * mpi_rank);
+  }
+  PetscCallVoid(VecRestoreArray(vec[2], &values));
+
+  tape->evaluate();
+
+  EXPECT_DOUBLE_EQ(s[0].getGradient(), (1 + 2 + 3 + ENTRIES_PER_RANK * 100 * mpi_rank) / s[1].getValue());
+  EXPECT_DOUBLE_EQ(s[1].getGradient(), -(1 + 2 + 3 + ENTRIES_PER_RANK * 100 * mpi_rank) * target / s[1].getValue());
+}
+
+TEST_F(VecSetup, VecPointwiseMult) {
+
+  PetscCallVoid(VecSet(vec[0], s[0]));
+  PetscCallVoid(VecSet(vec[1], s[1]));
+
+  PetscCallVoid(VecPointwiseMult(vec[2], vec[0], vec[1]));
+
+  adjoint_petsc::WrapperArray values = {};
+  PetscCallVoid(VecGetArray(vec[2], &values));
+
+  adjoint_petsc::Real target = s[0].getValue() * s[1].getValue();
+  for(int i = 0; i < ENTRIES_PER_RANK; i += 1) {
+    auto temp = values[i];
+    EXPECT_EQ(target, temp.getValue());
+    tape->registerOutput(temp);
+    temp.setGradient(i + 100 * mpi_rank);
+  }
+  PetscCallVoid(VecRestoreArray(vec[2], &values));
+
+  tape->evaluate();
+
+  EXPECT_EQ(s[0].getGradient(), (1 + 2 + 3 + ENTRIES_PER_RANK * 100 * mpi_rank) * s[1].getValue());
+  EXPECT_EQ(s[1].getGradient(), (1 + 2 + 3 + ENTRIES_PER_RANK * 100 * mpi_rank) * s[0].getValue());
+}
