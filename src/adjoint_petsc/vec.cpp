@@ -429,4 +429,19 @@ PetscErrorCode VecAYPX(ADVec y, Number beta, ADVec x) {
   return PETSC_SUCCESS;
 }
 
+PetscErrorCode VecShift(ADVec x, Number shift) {
+  // VecAYPX is purely local operation.
+  Real* x_data;
+
+  PetscCall(VecGetArray(x->vec, &x_data));
+
+  for(PetscInt i = 0; i < x->ad_size; i += 1) {
+    createRefType(x_data[i], x->ad_data[i]) += shift;
+  }
+
+  PetscCall(VecRestoreArray(x->vec, &x_data));
+
+  return PETSC_SUCCESS;
+}
+
 AP_NAMESPACE_END
