@@ -444,4 +444,65 @@ PetscErrorCode VecShift(ADVec x, Number shift) {
   return PETSC_SUCCESS;
 }
 
+struct ADData_VecMax : public ReverseDataBase<ADData_VecMax> {
+  MPI_Comm comm;
+  Identifier val_i;
+
+  std::vector<Identifier> x_i; // All values that are the maximum. (Only one if p was set.
+
+  ADData_VecMax(ADVec x, PetscInt* p, Number* val) : comm(MPI_COMM_NULL), val_i(val->getIdentifier()), x_i(0) {
+    PetscCallVoid(PetscObjectGetComm((PetscObject)x->vec, &comm));
+
+    if(nullptr != p) {
+      // Only update the specific value indicated by p.
+      PetscInt low;
+      PetscInt hight;
+      PetscCallVoid(VecGetOwnershipRange(x->vec, &low, &hight));
+
+      if(low <= *p && *p < hight) {
+        x_i.push_back(x->ad_data[*p - low]);
+      }
+    }
+    else {
+      // Update all values that are the same as max.
+      Real* x_data;
+
+      PetscCallVoid(VecGetArray(x->vec, &x_data));
+      for(int i = 0; i < x->ad_size; i += 1) {
+        if(val->getValue() == x_data[i]) {
+          x_i.push_back(x->ad_data[i]);
+        }
+      }
+      PetscCallVoid(VecRestoreArray(x->vec, &x_data));
+    }
+  }
+
+  void reverse(Tape* tape, VectorInterface* vi) {
+    (void)tape;
+
+    int dim = vi->getVectorSize();
+
+    std::vector<Real> adj(dim);
+
+    vi->getAdjointVec(val_i, adj.data());
+    vi->resetAdjointVec(val_i);
+
+    MPI_Allreduce(MPI_IN_PLACE, adj.data(), dim, MPI_DOUBLE, MPI_SUM, comm);
+
+    for(size_t i = 0; i < x_i.size(); i += 1) {
+      vi->updateAdjointVec(x_i[i], adj.data());
+    }
+  }
+};
+
+PetscErrorCode VecMax(ADVec x, PetscInt* p, Number* val) {
+  PetscCall(VecMax(x->vec, p, &val->value()));
+
+  Number::getTape().registerExternalFunctionOutput(*val);
+  ADData_VecMax* data = new ADData_VecMax(x, p, val);
+  data->push();
+
+  return PETSC_SUCCESS;
+}
+
 AP_NAMESPACE_END

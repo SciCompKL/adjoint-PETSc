@@ -45,6 +45,7 @@ PetscErrorCode VecSet           (ADVec x, Number alpha);
 PetscErrorCode VecAXPY          (ADVec y, Number alpha, ADVec x);
 PetscErrorCode VecAYPX          (ADVec y, Number beta, ADVec x);
 PetscErrorCode VecShift         (ADVec v, Number shift);
+PetscErrorCode VecMax           (ADVec x, PetscInt *p, Number *val);
 
 
 

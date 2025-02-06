@@ -230,3 +230,65 @@ TEST_F(VecSetup, VecShift) {
   EXPECT_EQ(s[0].getGradient(), 1 + 2 + 3 + ENTRIES_PER_RANK * 100 * mpi_rank);
   EXPECT_EQ(s[2].getGradient(), 1 + 2 + 3 + ENTRIES_PER_RANK * 100 * mpi_rank);
 }
+
+TEST_F(VecSetup, VecMax_PosNo) {
+
+  adjoint_petsc::WrapperArray values = {};
+  PetscCallVoid(VecGetArray(vec[0], &values));
+  for(int i = 0; i < ENTRIES_PER_RANK; i += 1) { values[i] = s[0]; }
+  PetscCallVoid(VecRestoreArray(vec[0], &values));
+
+  adjoint_petsc::Number v = {};
+  PetscCallVoid(VecMax(vec[0], nullptr, &v));
+
+
+  EXPECT_EQ(v.getValue(), (mpi_size - 1) * 10.0 + 1.0);
+  tape->registerOutput(v);
+  v.setGradient(pow(10.0, mpi_rank));
+
+  tape->evaluate();
+
+  adjoint_petsc::Real target_b = 0.0;
+  for(int i = 0; i < mpi_size; i += 1) {
+    target_b += pow(10.0, i);
+  }
+
+  if(mpi_rank + 1 == mpi_size) {
+    EXPECT_EQ(s[0].getGradient(), ENTRIES_PER_RANK * target_b); // All four vector entries get the value
+  }
+  else {
+    EXPECT_EQ(s[0].getGradient(), 0); // No maximum value.
+  }
+}
+
+TEST_F(VecSetup, VecMax_PosYes) {
+
+  adjoint_petsc::WrapperArray values = {};
+  PetscCallVoid(VecGetArray(vec[0], &values));
+  for(int i = 0; i < ENTRIES_PER_RANK; i += 1) { values[i] = s[0]; }
+  PetscCallVoid(VecRestoreArray(vec[0], &values));
+
+  PetscInt pos;
+  adjoint_petsc::Number v = {};
+  PetscCallVoid(VecMax(vec[0], &pos, &v));
+
+
+  EXPECT_EQ(v.getValue(), (mpi_size - 1) * 10.0 + 1.0);
+  EXPECT_EQ(pos, (mpi_size - 1) * ENTRIES_PER_RANK);
+  tape->registerOutput(v);
+  v.setGradient(pow(10.0, mpi_rank));
+
+  tape->evaluate();
+
+  adjoint_petsc::Real target_b = 0.0;
+  for(int i = 0; i < mpi_size; i += 1) {
+    target_b += pow(10.0, i);
+  }
+
+  if(mpi_rank + 1 == mpi_size) {
+    EXPECT_EQ(s[0].getGradient(),  target_b); // Only the first entry is set.
+  }
+  else {
+    EXPECT_EQ(s[0].getGradient(), 0); // No maximum value.
+  }
+}
