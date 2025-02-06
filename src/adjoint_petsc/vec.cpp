@@ -505,4 +505,97 @@ PetscErrorCode VecMax(ADVec x, PetscInt* p, Number* val) {
   return PETSC_SUCCESS;
 }
 
+struct ADData_VecNorm : public ReverseDataBase<ADData_VecNorm> {
+  MPI_Comm comm;
+  std::array<Identifier, 2> val_i;
+  Real val_v; // Only used for max.
+
+  NormType type;
+
+  std::vector<Real>       x_v;
+  std::vector<Identifier> x_i;
+
+  ADData_VecNorm(ADVec x, NormType type, Number* val) : comm(MPI_COMM_NULL), val_i(), val_v(val->getValue()),
+      type(type), x_i(x->ad_size), x_v(x->ad_size) {
+    PetscCallVoid(PetscObjectGetComm((PetscObject)x->vec, &comm));
+
+
+    int size = (type == NORM_1_AND_2) ? 2 : 1;
+    for(int i = 0; i < size; i += 1) {
+      val_i[i] = val[i].getIdentifier();
+    }
+
+    PetscCallVoid(AdjointVecData::extractPrimal(x, x_v.data()));
+    PetscCallVoid(AdjointVecData::extractIdentifier(x, x_i.data()));
+  }
+
+  void reverse(Tape* tape, VectorInterface* vi) {
+    (void)tape;
+
+    int dim = vi->getVectorSize();
+    int size = (type == NORM_1_AND_2) ? 2 : 1;
+
+    std::vector<Real> adj(dim * size);
+
+    for(int i = 0; i < size; i += 1) {
+      vi->getAdjointVec(val_i[i], adj.data() + i * dim);
+      vi->resetAdjointVec(val_i[i]);
+    }
+
+    MPI_Allreduce(MPI_IN_PLACE, adj.data(), dim * size, MPI_DOUBLE, MPI_SUM, comm);
+
+    if(type == NORM_1 || type == NORM_1_AND_2) {
+      for(size_t i = 0; i < x_i.size(); i += 1) {
+        for(int d = 0; d < dim; d += 1) {
+          if(x_v[i] < 0.0) { vi->updateAdjoint(x_i[i], d, -adj[d]); }
+          else if(x_v[i] > 0.0) { vi->updateAdjoint(x_i[i], d, adj[d]); }
+        }
+      }
+    }
+
+    if(type == NORM_2 || type == NORM_1_AND_2|| type == NORM_FROBENIUS) {
+      int pos = (type == NORM_1_AND_2) ? 1 : 0;
+
+      Real* adj_offset = adj.data() + pos * dim;
+
+      for(size_t i = 0; i < x_i.size(); i += 1) {
+        Real jac = 2.0 * x_v[i];
+        for(int d = 0; d < dim; d += 1) {
+          vi->updateAdjoint(x_i[i], d, jac * adj_offset[d]);
+        }
+      }
+    }
+    else if(type == NORM_MAX) {
+      for(size_t i = 0; i < x_i.size(); i += 1) {
+        if(abs(x_v[i]) == val_v) {
+          for(int d = 0; d < dim; d += 1) {
+            if(x_v[i] < 0.0) { vi->updateAdjoint(x_i[i], d, -adj[d]); }
+            else if(x_v[i] > 0.0) { vi->updateAdjoint(x_i[i], d, adj[d]); }
+          }
+        }
+      }
+    }
+    else {
+      // TODO: throw error.
+    }
+  }
+};
+
+PetscErrorCode VecNorm(ADVec x, NormType type, Number* val) {
+   std::array<Real, 2> val_p;
+
+  PetscCall(VecNorm(x->vec, type, val_p.data()));
+
+  int size = (type == NORM_1_AND_2) ? 2 : 1;
+  for(int i = 0; i < size; i += 1) {
+    val[i].setValue(val_p[i]);
+    Number::getTape().registerExternalFunctionOutput(val[i]);
+  }
+
+  ADData_VecNorm* data = new ADData_VecNorm(x, type, val);
+  data->push();
+
+  return PETSC_SUCCESS;
+}
+
 AP_NAMESPACE_END

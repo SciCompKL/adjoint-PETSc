@@ -49,6 +49,9 @@ struct AdjointVecData {
 
   static PetscErrorCode registerExternalFunctionOutput(ADVec vec);
 
+  static PetscErrorCode extractPrimal(ADVec vec, Real* vec_p);
+  static PetscErrorCode extractIdentifier(ADVec vec, Identifier* vec_i);
+
 };
 
 AP_NAMESPACE_END

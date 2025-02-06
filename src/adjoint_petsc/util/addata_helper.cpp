@@ -52,4 +52,20 @@ PetscErrorCode AdjointVecData::registerExternalFunctionOutput(ADVec vec) {
   return PETSC_SUCCESS;
 }
 
+PetscErrorCode AdjointVecData::extractPrimal(ADVec vec, Real* vec_p) {
+  Real* values;
+  PetscCall(VecGetArray(vec->vec, &values));
+  std::copy(values, &values[vec->ad_size], vec_p);
+  PetscCall(VecRestoreArray(vec->vec, &values));
+
+  return PETSC_SUCCESS;
+
+}
+
+PetscErrorCode AdjointVecData::extractIdentifier(ADVec vec, Identifier* vec_i) {
+  std::copy(vec->ad_data, &vec->ad_data[vec->ad_size], vec_i);
+
+  return PETSC_SUCCESS;
+}
+
 AP_NAMESPACE_END
