@@ -667,4 +667,54 @@ PetscErrorCode VecSum(ADVec x, Number* sum) {
   return PETSC_SUCCESS;
 }
 
+struct ADData_VecDot : public ReverseDataBase<ADData_VecDot> {
+  MPI_Comm comm;
+  Identifier val_i;
+
+  std::vector<Identifier> x_i;
+  std::vector<Real> x_v;
+
+  std::vector<Identifier> y_i;
+  std::vector<Real> y_v;
+
+  ADData_VecDot(ADVec x, ADVec y, Number* val) : comm(MPI_COMM_NULL), val_i(val->getIdentifier()), x_i(x->ad_size),
+      x_v(x->ad_size), y_i(x->ad_size), y_v(x->ad_size) {
+    PetscCallVoid(PetscObjectGetComm((PetscObject)x->vec, &comm));
+    PetscCallVoid(AdjointVecData::extractIdentifier(x, x_i.data()));
+    PetscCallVoid(AdjointVecData::extractPrimal(x, x_v.data()));
+    PetscCallVoid(AdjointVecData::extractIdentifier(y, y_i.data()));
+    PetscCallVoid(AdjointVecData::extractPrimal(y, y_v.data()));
+  }
+
+  void reverse(Tape* tape, VectorInterface* vi) {
+    (void)tape;
+
+    int dim = vi->getVectorSize();
+
+    std::vector<Real> adj(dim);
+
+    vi->getAdjointVec(val_i, adj.data());
+    vi->resetAdjointVec(val_i);
+
+    MPI_Allreduce(MPI_IN_PLACE, adj.data(), dim, MPI_DOUBLE, MPI_SUM, comm);
+
+    for(size_t i = 0; i < x_i.size(); i += 1) {
+      for(size_t d = 0; d < dim; d += 1) {
+        vi->updateAdjoint(x_i[i], d, y_v[i] * adj[d]);
+        vi->updateAdjoint(y_i[i], d, x_v[i] * adj[d]);
+      }
+    }
+  }
+};
+
+PetscErrorCode VecDot(ADVec x, ADVec y, Number* val) {
+  PetscCall(VecDot(x->vec, y->vec, &val->value()));
+
+  Number::getTape().registerExternalFunctionOutput(*val);
+  ADData_VecDot* data = new ADData_VecDot(x, y, val);
+  data->push();
+
+  return PETSC_SUCCESS;
+}
+
 AP_NAMESPACE_END
