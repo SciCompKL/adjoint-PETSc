@@ -53,10 +53,8 @@ PetscErrorCode VecSum           (ADVec v, Number *sum);
 PetscErrorCode VecDot           (ADVec x, ADVec y, Number *val);
 PetscErrorCode VecPointwiseDivide(ADVec w, ADVec x, ADVec y);
 PetscErrorCode VecPointwiseMult (ADVec w, ADVec x, ADVec y);
-
-
+PetscErrorCode VecGetOwnershipRange(ADVec x, PetscInt *low, PetscInt *high);
 
 void ADVecCreateADData(ADVec vec);
-
 
 AP_NAMESPACE_END

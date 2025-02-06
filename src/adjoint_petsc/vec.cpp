@@ -757,7 +757,10 @@ PetscErrorCode VecPointwiseMult (ADVec w, ADVec x, ADVec y) {
   PetscCall(VecRestoreArray(y->vec, &y_data));
 
   return PETSC_SUCCESS;
+}
 
+PetscErrorCode VecGetOwnershipRange(ADVec x, PetscInt *low, PetscInt *high) {
+  return VecGetOwnershipRange(x->vec, low, high);
 }
 
 AP_NAMESPACE_END
