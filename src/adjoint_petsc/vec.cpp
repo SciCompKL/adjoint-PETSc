@@ -763,4 +763,8 @@ PetscErrorCode VecGetOwnershipRange(ADVec x, PetscInt *low, PetscInt *high) {
   return VecGetOwnershipRange(x->vec, low, high);
 }
 
+PetscErrorCode VecSetOption(ADVec x, VecOption op, PetscBool flag) {
+  return VecSetOption(x->vec, op, flag);
+}
+
 AP_NAMESPACE_END

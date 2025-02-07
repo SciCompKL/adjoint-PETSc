@@ -54,6 +54,7 @@ PetscErrorCode VecDot           (ADVec x, ADVec y, Number *val);
 PetscErrorCode VecPointwiseDivide(ADVec w, ADVec x, ADVec y);
 PetscErrorCode VecPointwiseMult (ADVec w, ADVec x, ADVec y);
 PetscErrorCode VecGetOwnershipRange(ADVec x, PetscInt *low, PetscInt *high);
+PetscErrorCode VecSetOption     (ADVec x, VecOption op, PetscBool flag);
 
 void ADVecCreateADData(ADVec vec);
 
