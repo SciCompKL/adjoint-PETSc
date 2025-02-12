@@ -300,6 +300,18 @@ PetscErrorCode VecSetSizes(ADVec vec, PetscInt m, PetscInt M) {
 }
 
 PetscErrorCode VecDestroy(ADVec* vec) {
+  Real* vec_data;
+
+  PetscCall(VecGetArray((*vec)->vec, &vec_data));
+
+  Tape& tape = Number::getTape();
+  for(PetscInt i = 0; i < (*vec)->ad_size; i += 1) {
+    Wrapper temp = createRefType(vec_data[i], (*vec)->ad_data[i]);
+    tape.deactivateValue(temp);
+  }
+
+  PetscCall(VecRestoreArray((*vec)->vec, &vec_data));
+
   delete [] (*vec)->ad_data;
 
   PetscCall(VecDestroy(&(*vec)->vec));
