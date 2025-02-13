@@ -429,11 +429,17 @@ PetscErrorCode MatGetValue(ADMat mat, PetscInt row, PetscInt col, Number* v) {
   return MatGetValues(mat, 1, &row, 1, &col, v);
 }
 
-// PetscErrorCode MatMPIAIJSetPreallocation (ADMat B, PetscInt d_nz, const PetscInt d_nnz[], PetscInt o_nz, const PetscInt o_nnz[]);
-// PetscErrorCode MatMPIAIJSetPreallocation (ADMat B, PetscInt d_nz, const PetscInt d_nnz[], PetscInt o_nz, const PetscInt o_nnz[]);
+PetscErrorCode MatMPIAIJSetPreallocation(ADMat B, PetscInt d_nz, const PetscInt d_nnz[], PetscInt o_nz, const PetscInt o_nnz[]) {
+  return MatMPIAIJSetPreallocation(B->mat, d_nz, d_nnz, o_nz, o_nnz);
+}
+
 // PetscErrorCode MatMult                   (ADMat mat, Vec x, Vec y);
 // PetscErrorCode MatNorm                   (ADMat x, NormType type, Number *val);
-// PetscErrorCode MatSeqAIJSetPreallocation (ADMat B, PetscInt nz, const PetscInt nnz[]);
+
+PetscErrorCode MatSeqAIJSetPreallocation (ADMat B, PetscInt nz, const PetscInt nnz[]) {
+  return MatSeqAIJSetPreallocation(B->mat, nz, nnz);
+}
+
 PetscErrorCode MatSetFromOptions(ADMat mat) {
   return MatSetFromOptions(mat->mat);
 }
