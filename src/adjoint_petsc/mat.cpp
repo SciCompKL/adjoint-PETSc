@@ -408,7 +408,27 @@ PetscErrorCode MatGetType                (ADMat mat, MatType *type) {
   return MatGetType(mat->mat, type);
 }
 
-// PetscErrorCode MatGetValues              (ADMat mat, PetscInt m, const PetscInt idxm[], PetscInt n, const PetscInt idxn[], Number v[]);
+PetscErrorCode MatGetValues(ADMat mat, PetscInt m, const PetscInt idxm[], PetscInt n, const PetscInt idxn[], Number v[]) {
+  for(PetscInt row = 0; row < m; row += 1) {
+    if(idxm[row] < 0) { continue; }
+
+    for(PetscInt col = 0; col < n; col += 1) {
+      if (idxn[col] < 0) { continue; }
+
+      auto func = [&] (Wrapper& wrap) {
+        v[row * n + col] = wrap;
+      };
+      PetscCall(ADMatAccessValue(mat, idxm[row], idxn[col], func));
+    }
+  }
+
+  return PETSC_SUCCESS;
+}
+
+PetscErrorCode MatGetValue(ADMat mat, PetscInt row, PetscInt col, Number* v) {
+  return MatGetValues(mat, 1, &row, 1, &col, v);
+}
+
 // PetscErrorCode MatMPIAIJSetPreallocation (ADMat B, PetscInt d_nz, const PetscInt d_nnz[], PetscInt o_nz, const PetscInt o_nnz[]);
 // PetscErrorCode MatMPIAIJSetPreallocation (ADMat B, PetscInt d_nz, const PetscInt d_nnz[], PetscInt o_nz, const PetscInt o_nnz[]);
 // PetscErrorCode MatMult                   (ADMat mat, Vec x, Vec y);

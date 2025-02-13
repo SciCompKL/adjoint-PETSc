@@ -62,8 +62,6 @@ TEST_F(MatSetup, Duplicate) {
   adjoint_petsc::ADMat c;
   PetscCallVoid(MatDuplicate(mat[0], MAT_COPY_VALUES, &c));
 
-  PetscCallVoid(MatView(c, PETSC_VIEWER_STDOUT_WORLD));
-
   auto func = [&](PetscInt row, PetscInt col, adjoint_petsc::Wrapper& value) {
     tape->registerOutput(value);
 
@@ -90,4 +88,43 @@ TEST_F(MatSetup, Duplicate) {
   EXPECT_EQ(s[0].getGradient(), ENTRIES_PER_RANK * (100.0 + 10.0 * mpi_rank));
   EXPECT_EQ(s[1].getGradient(), (ENTRIES_PER_RANK - 1) * (10000.0 + 10.0 * mpi_rank) + (10000.0 + 10.0 * mpi_rank_next));
   EXPECT_EQ(s[2].getGradient(), ENTRIES_PER_RANK * (1000.0 + 10.0 * mpi_rank));
+}
+
+TEST_F(MatSetup, GetValues) {
+
+  std::array<adjoint_petsc::Number, ENTRIES_PER_RANK> diag;
+  std::array<adjoint_petsc::Number, ENTRIES_PER_RANK> left;
+  std::array<adjoint_petsc::Number, ENTRIES_PER_RANK> right;
+  diag.fill(s[0]);
+  left.fill(s[1]);
+  right.fill(s[2]);
+  PetscCallVoid(initTriDiagMatrix(mat[0], diag.data(), left.data(), right.data()));
+
+  std::array<PetscInt, 4> indices = {ENTRIES_PER_RANK * mpi_rank, ENTRIES_PER_RANK * mpi_rank + 1, ENTRIES_PER_RANK * mpi_rank + 2, ENTRIES_PER_RANK * mpi_rank + 3};
+  std::array<adjoint_petsc::Number, 8> values;
+
+  PetscCallVoid(MatGetValues(mat[0], 2, &indices[0], 2, &indices[0], &values[0])); // First block
+  PetscCallVoid(MatGetValues(mat[0], 2, &indices[2], 2, &indices[2], &values[4])); // Second block
+
+  adjoint_petsc::Number temp = 42;
+  PetscCallVoid(MatGetValue(mat[0], -1, 0, &temp));
+  EXPECT_EQ(temp.getValue(), 42); // Value is not modified.
+  PetscCallVoid(MatGetValue(mat[0], 0, -1, &temp));
+  EXPECT_EQ(temp.getValue(), 42); // Value is not modified.
+
+
+  std::array<adjoint_petsc::Real, 4> expected_values = {s[0].getValue(), s[2].getValue(), s[1].getValue(), s[0].getValue()};
+  for(int i = 0; i < 4; i += 1) {
+    EXPECT_EQ(values[i].getValue(), expected_values[i]);
+    EXPECT_EQ(values[i + 4].getValue(), expected_values[i]);
+
+    values[i].setGradient(100 + 10 * mpi_rank);
+    values[i + 4].setGradient(1000 + 10 * mpi_rank);
+  }
+
+  tape->evaluate();
+
+  EXPECT_EQ(s[0].getGradient(), 2 * 100 + 2 * 1000 + 4 * (10 * mpi_rank));
+  EXPECT_EQ(s[1].getGradient(), 100 + 1000 + 2 * (10 * mpi_rank));
+  EXPECT_EQ(s[2].getGradient(), 100 + 1000 + 2 * (10 * mpi_rank));
 }
