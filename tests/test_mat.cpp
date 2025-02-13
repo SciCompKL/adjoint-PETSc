@@ -128,3 +128,51 @@ TEST_F(MatSetup, GetValues) {
   EXPECT_EQ(s[1].getGradient(), 100 + 1000 + 2 * (10 * mpi_rank));
   EXPECT_EQ(s[2].getGradient(), 100 + 1000 + 2 * (10 * mpi_rank));
 }
+
+TEST_F(MatSetup, Mult) {
+
+  std::array<adjoint_petsc::Number, ENTRIES_PER_RANK> diag;
+  std::array<adjoint_petsc::Number, ENTRIES_PER_RANK> left;
+  std::array<adjoint_petsc::Number, ENTRIES_PER_RANK> right;
+  diag.fill(s[0]);
+  left.fill(s[1]);
+  right.fill(s[2]);
+  PetscCallVoid(initTriDiagMatrix(mat[0], diag.data(), left.data(), right.data()));
+
+  PetscCallVoid(VecSet(vec[0], s[3]));
+
+  PetscCallVoid(MatMult(mat[0], vec[0], vec[1]));
+
+  std::array<adjoint_petsc::Real, ENTRIES_PER_RANK * 2> expected_values = {184, 24, 24, 54, 344, 504, 504, 374};
+  // TODO: Throw error if mpi_ranks != 2
+
+  adjoint_petsc::WrapperArray values = {};
+  PetscCallVoid(VecGetArray(vec[1], &values));
+
+  for(int i = 0; i < ENTRIES_PER_RANK; i += 1) {
+    EXPECT_EQ(values[i].getValue(), expected_values[i + mpi_rank * ENTRIES_PER_RANK]);
+
+    values[i].setGradient(100 + 10 * mpi_rank);
+  }
+
+  PetscCallVoid(VecRestoreArray(vec[1], &values));
+
+  tape->evaluate();
+
+  std::array<adjoint_petsc::Real, ENTRIES_PER_RANK * 2> expected_gradients = {1730, 600, 600, 620, 2830, 3960, 3960, 3840};
+
+  for(int i = 0; i < ENTRIES_PER_RANK; i += 1) {
+    EXPECT_EQ(values[i].getValue(), expected_values[i + mpi_rank * ENTRIES_PER_RANK]);
+
+    values[i].setGradient(100 + 10 * mpi_rank);
+  }
+
+  std::array<adjoint_petsc::Real, 2> expected_gradients_s0 = {1600, 6160};
+  std::array<adjoint_petsc::Real, 2> expected_gradients_s1 = {1640, 6020};
+  std::array<adjoint_petsc::Real, 2> expected_gradients_s2 = {2600, 5060};
+  std::array<adjoint_petsc::Real, 2> expected_gradients_s3 = {3550, 14590};
+  EXPECT_EQ(s[0].getGradient(), expected_gradients_s0[mpi_rank]);
+  EXPECT_EQ(s[1].getGradient(), expected_gradients_s1[mpi_rank]);
+  EXPECT_EQ(s[2].getGradient(), expected_gradients_s2[mpi_rank]);
+  EXPECT_EQ(s[3].getGradient(), expected_gradients_s3[mpi_rank]);
+}

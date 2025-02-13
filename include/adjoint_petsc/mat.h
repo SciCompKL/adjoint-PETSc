@@ -2,6 +2,7 @@
 
 #include <petscmat.h>
 
+#include "vec.h"
 #include "util/base.hpp"
 #include "util/codi_def.hpp"
 
@@ -40,7 +41,7 @@ PetscErrorCode MatGetType                (ADMat mat, MatType *type);
 PetscErrorCode MatGetValue               (ADMat mat, PetscInt row, PetscInt col, Number* v);
 PetscErrorCode MatGetValues              (ADMat mat, PetscInt m, const PetscInt idxm[], PetscInt n, const PetscInt idxn[], Number v[]);
 PetscErrorCode MatMPIAIJSetPreallocation (ADMat B, PetscInt d_nz, const PetscInt d_nnz[], PetscInt o_nz, const PetscInt o_nnz[]);
-// PetscErrorCode MatMult                   (ADMat mat, Vec x, Vec y);
+PetscErrorCode MatMult                   (ADMat mat, ADVec x, ADVec y);
 // PetscErrorCode MatNorm                   (ADMat x, NormType type, Number *val);
 PetscErrorCode MatSeqAIJSetPreallocation (ADMat B, PetscInt nz, const PetscInt nnz[]);
 PetscErrorCode MatSetFromOptions         (ADMat mat);
@@ -51,6 +52,7 @@ PetscErrorCode MatSetValue               (ADMat mat, PetscInt i, PetscInt j, Num
 PetscErrorCode MatView                   (ADMat mat, PetscViewer viewer);
 // PetscErrorCode MatZeroEntries            (ADMat mat);
 
-void ADMatCreateADData(ADMat mat);
+void ADMatCreateADData  (ADMat mat);
+void ADMatCopyForReverse(ADMat mat, ADMat* newm);
 
 AP_NAMESPACE_END

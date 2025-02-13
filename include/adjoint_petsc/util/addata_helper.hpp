@@ -46,6 +46,7 @@ struct AdjointVecData {
   PetscErrorCode createAdjoint(Vec* vec_b, PetscInt dimSize);
   PetscErrorCode freeAdjoint(Vec* vec_b);
   PetscErrorCode getAdjoint(Vec vec_b, VectorInterface* vi, PetscInt dim);
+  PetscErrorCode updateAdjoint(Vec vec_b, VectorInterface* vi, PetscInt dim);
 
   static PetscErrorCode registerExternalFunctionOutput(ADVec vec);
 

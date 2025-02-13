@@ -29,7 +29,23 @@ PetscErrorCode AdjointVecData::getAdjoint(Vec vec_b, VectorInterface* vi, PetscI
   PetscCall(VecGetArray(vec_b, &adjoint));
   for(size_t i = 0; i < ids.size(); i += 1) {
     adjoint[i] = vi->getAdjoint(ids[i], dim);
+  }
+
+  // Reset afterwards since ids can contain duplicates.
+  for(size_t i = 0; i < ids.size(); i += 1) {
     vi->resetAdjoint(ids[i], dim);
+  }
+
+  PetscCall(VecRestoreArray(vec_b, &adjoint));
+
+  return PETSC_SUCCESS;
+}
+
+PetscErrorCode AdjointVecData::updateAdjoint(Vec vec_b, VectorInterface* vi, PetscInt dim) {
+  Real* adjoint;
+  PetscCall(VecGetArray(vec_b, &adjoint));
+  for(size_t i = 0; i < ids.size(); i += 1) {
+    vi->updateAdjoint(ids[i], dim, adjoint[i]);
   }
 
   PetscCall(VecRestoreArray(vec_b, &adjoint));

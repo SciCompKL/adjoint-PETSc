@@ -1,6 +1,8 @@
 #include "../../include/adjoint_petsc/mat.h"
 
 #include "../../include/adjoint_petsc/util/mat_iterator_util.hpp"
+#include "../../include/adjoint_petsc/util/addata_helper.hpp"
+#include "../../include/adjoint_petsc/util/petsc_missing.h"
 
 AP_NAMESPACE_START
 
@@ -433,7 +435,99 @@ PetscErrorCode MatMPIAIJSetPreallocation(ADMat B, PetscInt d_nz, const PetscInt 
   return MatMPIAIJSetPreallocation(B->mat, d_nz, d_nnz, o_nz, o_nnz);
 }
 
-// PetscErrorCode MatMult                   (ADMat mat, Vec x, Vec y);
+struct ADData_MatMult : public ReverseDataBase<ADData_MatMult> {
+
+  ADMat          A;
+  Vec            x_v;
+  AdjointVecData x_i;
+  AdjointVecData y_i;
+
+  ADData_MatMult(ADMat A, ADVec x, ADVec y) : A(), x_v(), x_i(x), y_i(y) {
+    PetscCallVoid(VecDuplicate(x->vec, &x_v));
+    PetscCallVoid(VecCopy(x->vec, x_v));
+
+    ADMatCopyForReverse(A, &this->A);
+  }
+
+  void reverse(Tape* tape, VectorInterface* vi) {
+    Vec x_b;
+    Vec y_b;
+    Mat A_b;
+    PetscCallVoid(x_i.createAdjoint(&x_b, 1));
+    PetscCallVoid(y_i.createAdjoint(&y_b, 1));
+    PetscCallVoid(MatDuplicate(A->mat, MAT_SHARE_NONZERO_PATTERN, &A_b));
+
+    PetscInt low;
+    PetscInt high;
+    PetscCallVoid(VecGetOwnershipRange(y_b,&low, &high));
+
+
+    // TODO: Refactor dyadic iteration procedure.
+    std::vector<Real> remote_x_v(0);
+    std::set<PetscInt> col_list= {};
+    std::map<PetscInt, PetscInt> colmap;
+
+    auto dyadic_init = [&] (PetscInt row, PetscInt col, Wrapper& value) {
+      if( col < low || high <= col) {
+        col_list.insert(col);
+      }
+    };
+    PetscCallVoid(ADObjIterateAllEntries(A, dyadic_init));
+
+    std::vector<PetscInt> col_vec(0);
+    col_vec.reserve(col_list.size());
+    remote_x_v.resize(col_list.size());
+    col_vec.insert(col_vec.begin(), col_list.begin(), col_list.end());
+
+    PetscInt pos = 0;
+    for(PetscInt col : col_vec) {
+      colmap[col] = pos;
+      pos += 1;
+    }
+
+    int dim = vi->getVectorSize();
+
+    PetscCallVoid(VecGetValuesNonLocal(x_v, col_vec.size(), col_vec.data(), remote_x_v.data()));
+
+    int cur_dim = 0;
+    auto dyadic_update = [&] (PetscInt row, PetscInt col, Wrapper& value) {
+      Real entry_y_b;
+      Real entry_x_v;
+      PetscCallVoid(VecGetValues(y_b, 1, &row, &entry_y_b));
+
+      if( low <= col && col < high) {
+        PetscCallVoid(VecGetValues(x_v, 1, &col, &entry_x_v));
+      } else {
+        entry_x_v = remote_x_v[colmap[col]];
+      }
+      vi->updateAdjoint(value.getIdentifier(), cur_dim, entry_y_b * entry_x_v);
+
+      value.value() = entry_y_b * entry_x_v;
+    };
+
+    for(; cur_dim < dim; cur_dim += 1) {
+      y_i.getAdjoint(y_b, vi, cur_dim);
+
+      PetscCallVoid(MatMultTranspose(A->mat, y_b, x_b));
+      x_i.updateAdjoint(x_b, vi, cur_dim);
+
+      PetscCallVoid(ADObjIterateAllEntries(A, dyadic_update));
+    }
+
+    PetscCallVoid(x_i.freeAdjoint(&x_b));
+    PetscCallVoid(y_i.freeAdjoint(&y_b));
+  }
+};
+
+PetscErrorCode MatMult(ADMat mat, ADVec x, ADVec y) {
+  PetscCall(MatMult(mat->mat, x->vec, y->vec));
+
+  ADData_MatMult* data = new ADData_MatMult(mat, x, y);
+  data->push();
+
+  return PETSC_SUCCESS;
+}
+
 // PetscErrorCode MatNorm                   (ADMat x, NormType type, Number *val);
 
 PetscErrorCode MatSeqAIJSetPreallocation (ADMat B, PetscInt nz, const PetscInt nnz[]) {
@@ -524,6 +618,16 @@ void ADMatCreateADData(ADMat mat) {
   mat->ad_size_diag = diag_size;
   mat->ad_data = new Identifier[mat->ad_size];
   memset(mat->ad_data, 0, sizeof(Identifier) * mat->ad_size);
+}
+
+void ADMatCopyForReverse(ADMat mat, ADMat* newm) {
+  *newm = new ADMatImpl();
+
+  PetscCallVoid(MatDuplicate(mat->mat, MAT_COPY_VALUES, &(*newm)->mat));
+
+  ADMatCreateADData(*newm);
+
+  std::copy(mat->ad_data, &mat->ad_data[mat->ad_size], (*newm)->ad_data);
 }
 
 AP_NAMESPACE_END
