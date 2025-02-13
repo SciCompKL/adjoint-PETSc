@@ -48,3 +48,46 @@ TEST_F(MatSetup, SetValues) {
   EXPECT_EQ(s[2].getGradient(), 10000.0 + 10 * mpi_rank); // Adjoint from own rank.
   EXPECT_EQ(s[3].getGradient(), 100000.0 + 10 * mpi_rank_next); // Adjoint from next rank.
 }
+
+TEST_F(MatSetup, Duplicate) {
+
+  std::array<adjoint_petsc::Number, ENTRIES_PER_RANK> diag;
+  std::array<adjoint_petsc::Number, ENTRIES_PER_RANK> left;
+  std::array<adjoint_petsc::Number, ENTRIES_PER_RANK> right;
+  diag.fill(s[0]);
+  left.fill(s[1]);
+  right.fill(s[2]);
+  PetscCallVoid(initTriDiagMatrix(mat[0], diag.data(), left.data(), right.data()));
+
+  adjoint_petsc::ADMat c;
+  PetscCallVoid(MatDuplicate(mat[0], MAT_COPY_VALUES, &c));
+
+  PetscCallVoid(MatView(c, PETSC_VIEWER_STDOUT_WORLD));
+
+  auto func = [&](PetscInt row, PetscInt col, adjoint_petsc::Wrapper& value) {
+    tape->registerOutput(value);
+
+    if( row == col) {
+      EXPECT_EQ(value.getValue(), 1.0 + 10 * mpi_rank);
+      value.setGradient(100 + 10 * mpi_rank);
+    } else if((row + 1) % (ENTRIES_PER_RANK * mpi_size) == col) {
+      EXPECT_EQ(value.getValue(), 3.0 + 10 * mpi_rank);
+      value.setGradient(1000 + 10 * mpi_rank);
+    } else {
+      if(0 == row % ENTRIES_PER_RANK) {
+        EXPECT_EQ(value.getValue(), 2.0 + 10 * mpi_rank_prev);
+      } else {
+        EXPECT_EQ(value.getValue(), 2.0 + 10 * mpi_rank);
+      }
+      value.setGradient(10000 + 10 * mpi_rank);
+    }
+  };
+  adjoint_petsc::ADObjIterateAllEntries(c, func);
+
+  tape->evaluate();
+
+  int sum = (mpi_size - 1) * mpi_size / 2; // 0 + 1 + ... + (mpi_size - 1)
+  EXPECT_EQ(s[0].getGradient(), ENTRIES_PER_RANK * (100.0 + 10.0 * mpi_rank));
+  EXPECT_EQ(s[1].getGradient(), (ENTRIES_PER_RANK - 1) * (10000.0 + 10.0 * mpi_rank) + (10000.0 + 10.0 * mpi_rank_next));
+  EXPECT_EQ(s[2].getGradient(), ENTRIES_PER_RANK * (1000.0 + 10.0 * mpi_rank));
+}

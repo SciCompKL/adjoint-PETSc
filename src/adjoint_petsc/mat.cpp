@@ -272,7 +272,7 @@ struct ADData_MatSetValues {
   PetscInt insertLhsPos(PetscInt row, PetscInt col) {
     // Search for the position.
     for(size_t i = 0; i < lhs_in_positions.size(); i += 1) {
-      if(row == lhs_in_positions[i].row && row == lhs_in_positions[i].col) {
+      if(row == lhs_in_positions[i].row && col == lhs_in_positions[i].col) {
         return i;
       }
     }
@@ -370,7 +370,23 @@ PetscErrorCode MatDestroy(ADMat* mat) {
   return PETSC_SUCCESS;
 }
 
-// PetscErrorCode MatDuplicate              (ADMat mat, ADMat* newv);
+PetscErrorCode MatDuplicate(ADMat mat, MatDuplicateOption op, ADMat* newv) {
+  *newv = new ADMatImpl();
+
+  PetscCall(MatDuplicate(mat->mat, op, &(*newv)->mat));
+
+  ADMatCreateADData(*newv);
+
+  if(op == MAT_COPY_VALUES) {
+    auto func = [&] (PetscInt row, PetscInt col, Wrapper& a, Wrapper& b) {
+      b = a;
+    };
+    PetscCall(ADObjIterateAllEntries(mat, *newv, func));
+  }
+
+  return PETSC_SUCCESS;
+
+}
 
 PetscErrorCode MatGetInfo(ADMat mat, MatInfoType flag, MatInfo *info) {
   return MatGetInfo(mat->mat, flag, info);

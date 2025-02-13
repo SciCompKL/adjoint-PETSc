@@ -31,7 +31,7 @@ PetscErrorCode MatCreate                 (MPI_Comm comm, ADMat* mat);
 PetscErrorCode MatCreateAIJ              (MPI_Comm comm, PetscInt m, PetscInt n, PetscInt M, PetscInt N, PetscInt d_nz, const PetscInt d_nnz[], PetscInt o_nz, const PetscInt o_nnz[], ADMat *A);
 // PetscErrorCode MatCreateDense            (MPI_Comm comm, PetscInt m, PetscInt n, PetscInt M, PetscInt N, Number *data, ADMat *A);
 PetscErrorCode MatDestroy                (ADMat* mat);
-// PetscErrorCode MatDuplicate              (ADMat mat, ADMat* newv);
+PetscErrorCode MatDuplicate              (ADMat mat, MatDuplicateOption op, ADMat* newv);
 PetscErrorCode MatGetInfo                (ADMat mat, MatInfoType flag, MatInfo *info);
 PetscErrorCode MatGetLocalSize           (ADMat mat, PetscInt *m, PetscInt *n);
 PetscErrorCode MatGetOwnershipRange      (ADMat mat, PetscInt *m, PetscInt *n);
