@@ -342,8 +342,18 @@ PetscErrorCode MatAssemblyEnd(ADMat mat, MatAssemblyType type) {
 
   return PETSC_SUCCESS;
 }
-// PetscErrorCode MatConvert                (ADMat mat, MatType newtype, MatReuse reuse, ADMat *M);
-// PetscErrorCode MatCreate                 (MPI_Comm comm, ADMat* mat);
+PetscErrorCode MatConvert                (ADMat mat, MatType newtype, MatReuse reuse, ADMat *M) {
+  throw std::runtime_error("'MatConvert' not implemented.");
+
+  return PETSC_SUCCESS;
+}
+
+PetscErrorCode MatCreate                 (MPI_Comm comm, ADMat* mat) {
+  throw std::runtime_error("'MatConvert' not implemented.");
+
+  return PETSC_SUCCESS;
+}
+
 PetscErrorCode MatCreateAIJ(MPI_Comm comm, PetscInt m, PetscInt n, PetscInt M, PetscInt N, PetscInt d_nz, const PetscInt d_nnz[], PetscInt o_nz, const PetscInt o_nnz[], ADMat *A) {
   (*A) = new ADMatImpl();
   PetscCall(MatCreateAIJ(comm, m, n, M, N, d_nz, d_nnz, o_nz, o_nnz, &(*A)->mat));

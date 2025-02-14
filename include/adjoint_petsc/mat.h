@@ -27,7 +27,7 @@ using ADMat = ADMatImpl*;
 
 PetscErrorCode MatAssemblyBegin          (ADMat mat, MatAssemblyType type);
 PetscErrorCode MatAssemblyEnd            (ADMat mat, MatAssemblyType type);
-// PetscErrorCode MatConvert                (ADMat mat, MatType newtype, MatReuse reuse, ADMat *M);
+PetscErrorCode MatConvert                (ADMat mat, MatType newtype, MatReuse reuse, ADMat *M);
 PetscErrorCode MatCreate                 (MPI_Comm comm, ADMat* mat);
 PetscErrorCode MatCreateAIJ              (MPI_Comm comm, PetscInt m, PetscInt n, PetscInt M, PetscInt N, PetscInt d_nz, const PetscInt d_nnz[], PetscInt o_nz, const PetscInt o_nnz[], ADMat *A);
 // PetscErrorCode MatCreateDense            (MPI_Comm comm, PetscInt m, PetscInt n, PetscInt M, PetscInt N, Number *data, ADMat *A);
