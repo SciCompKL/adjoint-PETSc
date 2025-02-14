@@ -528,7 +528,120 @@ PetscErrorCode MatMult(ADMat mat, ADVec x, ADVec y) {
   return PETSC_SUCCESS;
 }
 
-// PetscErrorCode MatNorm                   (ADMat x, NormType type, Number *val);
+struct ADData_MatNorm : public ReverseDataBase<ADData_MatNorm> {
+
+  ADMat         x;
+  NormType      type;
+  Real          v_v;
+  Identifier    v_i;
+
+  ADData_MatNorm(ADMat x, NormType type, Number* v) : x(), type(type), v_v(v->getValue()), v_i() {
+
+    Number::getTape().registerExternalFunctionOutput(*v);
+    v_i = v->getIdentifier();
+
+    ADMatCopyForReverse(x, &this->x);
+  }
+
+  void reverse(Tape* tape, VectorInterface* vi) {
+    int dim = vi->getVectorSize();
+
+    MPI_Comm comm;
+    PetscObjectGetComm((PetscObject)x->mat, &comm);
+
+    // Get the lhs adjoint.
+    std::vector<Real> v_b(dim);
+    vi->getAdjointVec(v_i, v_b.data());
+    vi->resetAdjointVec(v_i);
+    MPI_Allreduce(MPI_IN_PLACE, v_b.data(), dim, MPI_DOUBLE, MPI_SUM, comm);
+
+    if(type == NORM_1 || type == NORM_INFINITY) {
+      std::set<PetscInt> selected = {};
+
+      // First select the rows/cols with the maximum values.
+      if(type == NORM_1) {
+        PetscInt col_size;
+        PetscInt row_size;
+        PetscCallVoid(MatGetSize(x->mat, &row_size, &col_size));
+
+
+        std::vector<Real> col_sums(col_size);
+        PetscCallVoid(MatGetColumnSumAbs(x->mat, col_sums.data()));
+
+        PetscInt cur_col = 0;
+        for(Real const& value_col : col_sums) {
+          if(value_col == v_v) {
+            selected.insert(cur_col);
+          }
+          cur_col += 1;
+        }
+      }
+      else if(type == NORM_INFINITY) {
+        PetscInt low;
+        PetscInt high;
+        PetscCallVoid(MatGetOwnershipRange(x->mat, &low, &high));
+        PetscInt range = high - low;
+
+        Vec row_sums;
+        PetscCallVoid(MatCreateVecs(x->mat, &row_sums, NULL));
+        PetscCallVoid(MatGetRowSumAbs(x->mat, row_sums));
+
+        Real* row_sums_values;
+        PetscCallVoid(VecGetArray(row_sums, &row_sums_values));
+
+        for(PetscInt cur_row = 0; cur_row < range; cur_row += 1) {
+          if(row_sums_values[cur_row] == v_v) {
+            selected.insert(cur_row + low);
+          }
+        }
+
+        PetscCallVoid(VecRestoreArray(row_sums, &row_sums_values));
+        PetscCallVoid(VecDestroy(&row_sums));
+      }
+
+      // Iterate and perform the adjoint update.
+      auto func = [&](PetscInt row, PetscInt col, Wrapper& value) {
+        PetscInt sel = type == NORM_1 ? col : row;
+        if(selected.end() == selected.find(sel)) {
+          return;
+        }
+
+        Real jac = 0.0;
+        if(value.getValue() < 0.0) {
+          jac = -1.0;
+        }
+        else if(value.getValue() > 0.0) {
+          jac = 1.0;
+        }
+
+        for(int i = 0; i < dim; i += 1) {
+          vi->updateAdjoint(value.getIdentifier(), i, v_b[i] * jac);
+        }
+      };
+      ADObjIterateAllEntries(x, func);
+    }
+    else if(type == NORM_FROBENIUS) {
+      auto func = [&](PetscInt row, PetscInt col, Wrapper& value) {
+        for(int i = 0; i < dim; i += 1) {
+          vi->updateAdjoint(value.getIdentifier(), i, v_b[i] * value.value() / v_v);
+        }
+      };
+      ADObjIterateAllEntries(x, func);
+    }
+    else {
+      // TODO: Throw error
+    }
+  }
+};
+
+PetscErrorCode MatNorm(ADMat x, NormType type, Number *val) {
+  PetscCall(MatNorm(x->mat, type, &val->value()));
+
+  ADData_MatNorm* data = new ADData_MatNorm(x, type, val);
+  data->push();
+
+  return PETSC_SUCCESS;
+}
 
 PetscErrorCode MatSeqAIJSetPreallocation (ADMat B, PetscInt nz, const PetscInt nnz[]) {
   return MatSeqAIJSetPreallocation(B->mat, nz, nnz);

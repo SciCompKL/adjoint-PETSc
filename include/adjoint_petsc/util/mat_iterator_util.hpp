@@ -7,6 +7,70 @@ AP_NAMESPACE_START
 
 namespace iterator_implementation {
 
+  // TODO: Generalize for different sparsity pattern and with respect to other ierator functions. (Make them share code.)
+  template<typename Func>
+  PetscErrorCode MatSeqAIJIterateAllEntries(Mat mat, PetscInt const* colmap, Func&& func) {
+    PetscInt const* row_offset;
+    PetscInt const* column_ids;
+    Real* values;
+    PetscMemType mem;
+    PetscInt low;
+    PetscInt high;
+    PetscInt row_range;
+
+    PetscCall(MatGetOwnershipRange(mat, &low, &high));
+    PetscCall(MatSeqAIJGetCSRAndMemType(mat, &row_offset, &column_ids, &values, &mem));
+
+    row_range = high - low;
+
+    for(int cur_local_row = 0; cur_local_row < row_range; cur_local_row += 1) {
+      int col_range = row_offset[cur_local_row + 1] - row_offset[cur_local_row];
+      int col_offset = row_offset[cur_local_row];
+
+      int row = cur_local_row + low;
+      for(int cur_local_col = 0; cur_local_col < col_range; cur_local_col += 1) {
+        int col = column_ids[cur_local_col + col_offset];
+        if(nullptr != colmap) {
+          col = colmap[col];
+        } else {
+          col += low;
+        }
+        func(row, col, values[cur_local_col + col_offset]);
+      }
+    }
+
+    return PETSC_SUCCESS;
+  }
+
+  // TODO: Generalize for different sparsity pattern and with respect to other ierator functions. (Make them share code.)
+  template<typename Func>
+  PetscErrorCode MatAIJIterateAllEntries(Mat mat, Func&& func) {
+    Mat matd;
+    Mat mato;
+    PetscInt const* colmap;
+    PetscCall(MatMPIAIJGetSeqAIJ(mat, &matd, &mato, &colmap));
+
+    PetscInt col_low;
+    PetscInt col_high;
+    PetscCall(MatGetOwnershipRangeColumn(mat, &col_low, &col_high));
+    PetscInt row_low;
+    PetscInt row_high;
+    PetscCall(MatGetOwnershipRange(mat, &row_low, &row_high));
+
+    auto func_shift = [&] (PetscInt row, PetscInt col, PetscReal& value) {
+      func(row + row_low, col + col_low, value);
+    };
+
+    auto func_shift_row = [&] (PetscInt row, PetscInt col, PetscReal& value) {
+      func(row + row_low, col, value);
+    };
+
+    PetscCall(MatSeqAIJIterateAllEntries(matd, nullptr, func_shift));
+    PetscCall(MatSeqAIJIterateAllEntries(mato, colmap, func_shift_row));
+
+    return PETSC_SUCCESS;
+  }
+
   template<typename Func>
   PetscErrorCode MatSeqAIJIterateAllEntries(Mat mat, PetscInt const* colmap, Identifier* ad_data, Func&& func) {
     PetscInt const* row_offset;
@@ -195,6 +259,13 @@ namespace iterator_implementation {
     return PETSC_SUCCESS;
   }
 }
+
+  template<typename Func>
+  PetscErrorCode PetscObjectIterateAllEntries(Mat mat, Func&& func) {
+    // TODO: Check matrix type and select iterator
+
+    return iterator_implementation::MatAIJIterateAllEntries(mat, std::forward<Func>(func));
+  }
 
 template<typename Func>
 PetscErrorCode ADObjIterateAllEntries(ADMat mat, Func&& func) {

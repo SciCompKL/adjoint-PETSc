@@ -6,7 +6,7 @@
 #include <adjoint_petsc/vec.h>
 
 struct VecSetup : public testing::Test {
-  protected:
+  public:
 
   static int constexpr ENTRIES_PER_RANK = 4;
   static int constexpr VECTOR_COUNT     = 5;

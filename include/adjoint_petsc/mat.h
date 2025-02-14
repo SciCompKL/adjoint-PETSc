@@ -42,7 +42,7 @@ PetscErrorCode MatGetValue               (ADMat mat, PetscInt row, PetscInt col,
 PetscErrorCode MatGetValues              (ADMat mat, PetscInt m, const PetscInt idxm[], PetscInt n, const PetscInt idxn[], Number v[]);
 PetscErrorCode MatMPIAIJSetPreallocation (ADMat B, PetscInt d_nz, const PetscInt d_nnz[], PetscInt o_nz, const PetscInt o_nnz[]);
 PetscErrorCode MatMult                   (ADMat mat, ADVec x, ADVec y);
-// PetscErrorCode MatNorm                   (ADMat x, NormType type, Number *val);
+PetscErrorCode MatNorm                   (ADMat x, NormType type, Number *val);
 PetscErrorCode MatSeqAIJSetPreallocation (ADMat B, PetscInt nz, const PetscInt nnz[]);
 PetscErrorCode MatSetFromOptions         (ADMat mat);
 PetscErrorCode MatSetOption              (ADMat x, MatOption op, PetscBool flag);

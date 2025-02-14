@@ -176,3 +176,67 @@ TEST_F(MatSetup, Mult) {
   EXPECT_EQ(s[2].getGradient(), expected_gradients_s2[mpi_rank]);
   EXPECT_EQ(s[3].getGradient(), expected_gradients_s3[mpi_rank]);
 }
+
+template<typename Test>
+void performNormTest(Test& test, NormType type, adjoint_petsc::Real expected_value, adjoint_petsc::Real* expected_grad) {
+  std::array<adjoint_petsc::Number, Test::ENTRIES_PER_RANK> diag;
+  std::array<adjoint_petsc::Number, Test::ENTRIES_PER_RANK> left;
+  std::array<adjoint_petsc::Number, Test::ENTRIES_PER_RANK> right;
+  diag.fill(test.s[0]);
+  left.fill(test.s[1]);
+  right.fill(-test.s[2]);
+  PetscCallVoid(test.initTriDiagMatrix(test.mat[0], diag.data(), left.data(), right.data()));
+
+  adjoint_petsc::Number norm;
+  PetscCallVoid(MatNorm(test.mat[0], type, &norm));
+
+  EXPECT_DOUBLE_EQ(norm.getValue(), expected_value);
+  norm.setGradient(100 + 10 * test.mpi_rank);
+
+  test.tape->evaluate();
+
+  EXPECT_DOUBLE_EQ(test.s[0].getGradient(), expected_grad[0]);
+  EXPECT_DOUBLE_EQ(test.s[1].getGradient(), expected_grad[1]);
+  EXPECT_DOUBLE_EQ(test.s[2].getGradient(), expected_grad[2]);
+}
+
+TEST_F(MatSetup, Norm_1) {
+  adjoint_petsc::Real expected_value = 36;
+  std::array<adjoint_petsc::Real, 3> expected_gradients_zero = {0.0, 0.0, 0.0};
+
+  int mpi_sum = 10 * (mpi_size - 1) * mpi_size / 2;
+  adjoint_petsc::Real grad_base = (100.0 * mpi_size + mpi_sum) * (ENTRIES_PER_RANK - 1);
+  std::array<adjoint_petsc::Real, 3> expected_gradients = {grad_base, grad_base, grad_base};
+  if (0 == mpi_rank_next) {
+    performNormTest(*this, NORM_1, expected_value, expected_gradients.data());
+  }
+  else {
+    performNormTest(*this, NORM_1, expected_value, expected_gradients_zero.data());
+  }
+}
+
+TEST_F(MatSetup, Norm_F) {
+  // TODO: Throw error for mpi_size != 2
+  adjoint_petsc::Real expected_value = 42.33202097703346;
+  std::array<adjoint_petsc::Real, 3 * 2> expected_gradients = {
+      19.84313483298442, 39.68626966596885, 59.52940449895328,
+      218.2744831628287, 238.1176179958131, 257.96075282879758
+  };
+  performNormTest(*this, NORM_FROBENIUS, expected_value, &expected_gradients[mpi_rank * 3]);
+
+}
+
+TEST_F(MatSetup, Norm_INF) {
+  adjoint_petsc::Real expected_value = 36;
+  std::array<adjoint_petsc::Real, 3> expected_gradients_zero = {0.0, 0.0, 0.0};
+
+  int mpi_sum = 10 * (mpi_size - 1) * mpi_size / 2;
+  adjoint_petsc::Real grad_base = (100.0 * mpi_size + mpi_sum) * (ENTRIES_PER_RANK - 1);
+  std::array<adjoint_petsc::Real, 3> expected_gradients = {grad_base, grad_base, grad_base};
+  if (0 == mpi_rank_next) {
+    performNormTest(*this, NORM_INFINITY, expected_value, expected_gradients.data());
+  }
+  else {
+    performNormTest(*this, NORM_INFINITY, expected_value, expected_gradients_zero.data());
+  }
+}

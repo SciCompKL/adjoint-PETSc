@@ -8,7 +8,7 @@
 #include "vec_setup.hpp"
 
 struct MatSetup : public VecSetup {
-  protected:
+  public:
 
   using Base = VecSetup;
   static int constexpr ENTRIES_PER_RANK        = Base::ENTRIES_PER_RANK;

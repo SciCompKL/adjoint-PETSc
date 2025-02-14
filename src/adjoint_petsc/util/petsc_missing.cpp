@@ -2,6 +2,9 @@
 
 #include "../../../include/adjoint_petsc/util/petsc_missing.h"
 
+#include "../../../include/adjoint_petsc/util/mat_iterator_util.hpp"
+
+
 
 
 AP_NAMESPACE_START
@@ -37,5 +40,27 @@ PetscErrorCode VecGetValuesNonLocal(Vec vec, PetscInt ni, PetscInt ix[], PetscSc
 
   return PETSC_SUCCESS;
 }
+
+PetscErrorCode MatGetColumnSumAbs(Mat mat, PetscScalar y[]) {
+  PetscInt rows;
+  PetscInt cols;
+
+  PetscCall(MatGetSize(mat, &rows, &cols));
+
+  std::fill(y, &y[cols], PetscScalar());
+
+  auto func = [&] (PetscInt row, PetscInt col, PetscScalar& value) {
+    y[col] += abs(value);
+  };
+  PetscObjectIterateAllEntries(mat, func);
+
+  MPI_Comm comm;
+  PetscCall(PetscObjectGetComm((PetscObject)mat, &comm));
+
+  MPI_Allreduce(MPI_IN_PLACE, y, cols, MPI_DOUBLE, MPI_SUM, comm);
+
+  return PETSC_SUCCESS;
+}
+
 
 AP_NAMESPACE_END
