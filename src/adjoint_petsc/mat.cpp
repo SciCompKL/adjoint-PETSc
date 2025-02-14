@@ -690,8 +690,12 @@ PetscErrorCode MatView(ADMat mat, PetscViewer viewer) {
   return MatView(mat->mat, viewer);
 }
 
-// PetscErrorCode MatZeroEntries            (ADMat mat);
-
+PetscErrorCode MatZeroEntries(ADMat mat) {
+  auto func = [&] (PetscInt row, PetscInt col, Wrapper& value) {
+    value = Real();
+  };
+  return ADObjIterateAllEntries(mat, func);
+}
 
 PetscErrorCode MatSeqAIJGetEntrySize(Mat mat, PetscInt* entries) {
   PetscInt const* row_offset;

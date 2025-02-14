@@ -240,3 +240,30 @@ TEST_F(MatSetup, Norm_INF) {
     performNormTest(*this, NORM_INFINITY, expected_value, expected_gradients_zero.data());
   }
 }
+
+TEST_F(MatSetup, ZeroEntries) {
+  std::array<adjoint_petsc::Number, ENTRIES_PER_RANK> diag;
+  std::array<adjoint_petsc::Number, ENTRIES_PER_RANK> left;
+  std::array<adjoint_petsc::Number, ENTRIES_PER_RANK> right;
+  diag.fill(s[0]);
+  left.fill(s[1]);
+  right.fill(s[2]);
+  PetscCallVoid(initTriDiagMatrix(mat[0], diag.data(), left.data(), right.data()));
+
+  PetscCallVoid(MatZeroEntries(mat[0]));
+
+  auto func = [&] (PetscInt row, PetscInt col, adjoint_petsc::Wrapper& value) {
+    tape->registerOutput(value);
+
+    EXPECT_EQ(value.getIdentifier(), 0.0);
+
+    value.setGradient(100.0);
+  };
+  ADObjIterateAllEntries(mat[0], func);
+
+  tape->evaluate();
+
+  EXPECT_EQ(s[0].getGradient(), 0.0);
+  EXPECT_EQ(s[1].getGradient(), 0.0);
+  EXPECT_EQ(s[2].getGradient(), 0.0);
+}

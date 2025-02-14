@@ -50,7 +50,7 @@ PetscErrorCode MatSetSizes               (ADMat mat, PetscInt m, PetscInt n, Pet
 PetscErrorCode MatSetValues              (ADMat mat, PetscInt m, const PetscInt idxm[], PetscInt n, const PetscInt idxn[], const Number v[], InsertMode addv);
 PetscErrorCode MatSetValue               (ADMat mat, PetscInt i, PetscInt j, Number v, InsertMode addv);
 PetscErrorCode MatView                   (ADMat mat, PetscViewer viewer);
-// PetscErrorCode MatZeroEntries            (ADMat mat);
+PetscErrorCode MatZeroEntries            (ADMat mat);
 
 void ADMatCreateADData  (ADMat mat);
 void ADMatCopyForReverse(ADMat mat, ADMat* newm);
