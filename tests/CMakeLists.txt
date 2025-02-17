@@ -11,8 +11,10 @@ include(GoogleTest)
 
 add_executable(adjoint_petsc_tests
     main_test.cpp
+    test_ksp.cpp
+    test_mat.cpp
     test_vec.cpp
-    test_mat.cpp)
+  )
 
 target_link_libraries(adjoint_petsc_tests PUBLIC gtest adjoint_petsc)
 

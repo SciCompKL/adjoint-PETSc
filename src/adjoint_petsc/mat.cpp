@@ -3,6 +3,7 @@
 #include "../../include/adjoint_petsc/util/mat_iterator_util.hpp"
 #include "../../include/adjoint_petsc/util/addata_helper.hpp"
 #include "../../include/adjoint_petsc/util/petsc_missing.h"
+#include "../../include/adjoint_petsc/util/dyadic_product_helper.hpp"
 
 AP_NAMESPACE_START
 
@@ -467,52 +468,21 @@ struct ADData_MatMult : public ReverseDataBase<ADData_MatMult> {
     PetscCallVoid(y_i.createAdjoint(&y_b, 1));
     PetscCallVoid(MatDuplicate(A->mat, MAT_SHARE_NONZERO_PATTERN, &A_b));
 
-    PetscInt low;
-    PetscInt high;
-    PetscCallVoid(VecGetOwnershipRange(y_b,&low, &high));
-
-
-    // TODO: Refactor dyadic iteration procedure.
-    std::vector<Real> remote_x_v(0);
-    std::set<PetscInt> col_list= {};
-    std::map<PetscInt, PetscInt> colmap;
-
-    auto dyadic_init = [&] (PetscInt row, PetscInt col, Wrapper& value) {
-      if( col < low || high <= col) {
-        col_list.insert(col);
-      }
-    };
-    PetscCallVoid(ADObjIterateAllEntries(A, dyadic_init));
-
-    std::vector<PetscInt> col_vec(0);
-    col_vec.reserve(col_list.size());
-    remote_x_v.resize(col_list.size());
-    col_vec.insert(col_vec.begin(), col_list.begin(), col_list.end());
-
-    PetscInt pos = 0;
-    for(PetscInt col : col_vec) {
-      colmap[col] = pos;
-      pos += 1;
-    }
+    DyadicProductHelper dyadic = {};
+    dyadic.init(A->mat, x_v);
+    PetscCallVoid(dyadic.communicateValues(x_v));
 
     int dim = vi->getVectorSize();
 
-    PetscCallVoid(VecGetValuesNonLocal(x_v, col_vec.size(), col_vec.data(), remote_x_v.data()));
 
     int cur_dim = 0;
     auto dyadic_update = [&] (PetscInt row, PetscInt col, Wrapper& value) {
       Real entry_y_b;
       Real entry_x_v;
       PetscCallVoid(VecGetValues(y_b, 1, &row, &entry_y_b));
+      PetscCallVoid(dyadic.getValue(x_v, col, &entry_x_v));
 
-      if( low <= col && col < high) {
-        PetscCallVoid(VecGetValues(x_v, 1, &col, &entry_x_v));
-      } else {
-        entry_x_v = remote_x_v[colmap[col]];
-      }
       vi->updateAdjoint(value.getIdentifier(), cur_dim, entry_y_b * entry_x_v);
-
-      value.value() = entry_y_b * entry_x_v;
     };
 
     for(; cur_dim < dim; cur_dim += 1) {
