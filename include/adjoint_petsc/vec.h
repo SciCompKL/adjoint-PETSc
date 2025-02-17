@@ -55,6 +55,7 @@ PetscErrorCode VecSetValues         (ADVec vec, PetscInt ni, PetscInt const* ix,
 PetscErrorCode VecShift             (ADVec v, Number shift);
 PetscErrorCode VecSum               (ADVec v, Number *sum);
 PetscErrorCode VecView              (ADVec vec, PetscViewer viewer);
+PetscErrorCode VecWAXPY             (ADVec w, Number alpha, ADVec x, ADVec y); // TODO: implement
 
 void ADVecCreateADData(ADVec vec);
 
