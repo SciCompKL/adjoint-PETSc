@@ -773,6 +773,27 @@ PetscErrorCode VecView(ADVec vec, PetscViewer viewer) {
   return VecView(vec->vec, viewer);
 }
 
+PetscErrorCode VecWAXPY(ADVec w, Number alpha, ADVec x, ADVec y) {
+  // VecWAXPY is purely local operation.
+  Real* w_data;
+  Real* x_data;
+  Real* y_data;
+
+  PetscCall(VecGetArray(w->vec, &w_data));
+  PetscCall(VecGetArray(x->vec, &x_data));
+  PetscCall(VecGetArray(y->vec, &y_data));
+
+  for(PetscInt i = 0; i < x->ad_size; i += 1) {
+    createRefType(w_data[i], w->ad_data[i]) = alpha * createRefType(x_data[i], x->ad_data[i]) + createRefType(y_data[i], y->ad_data[i]);
+  }
+
+  PetscCall(VecRestoreArray(w->vec, &w_data));
+  PetscCall(VecRestoreArray(x->vec, &x_data));
+  PetscCall(VecRestoreArray(y->vec, &y_data));
+
+  return PETSC_SUCCESS;
+}
+
 /*************************************************************
  * ADVector functions
  */
