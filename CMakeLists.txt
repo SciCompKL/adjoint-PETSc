@@ -14,10 +14,11 @@ set(PESTc_DIR     Not_Defined CACHE PATH "Path to petsc")
 find_package(CoDiPack CONFIG REQUIRED)
 
 add_library(adjoint_petsc
-  src/adjoint_petsc/vec.cpp
+  src/adjoint_petsc/ksp.cpp
   src/adjoint_petsc/mat.cpp
-  src/adjoint_petsc/util/petsc_missing.cpp
   src/adjoint_petsc/util/addata_helper.cpp
+  src/adjoint_petsc/util/petsc_missing.cpp
+  src/adjoint_petsc/vec.cpp
 )
 
 target_include_directories(adjoint_petsc PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include ${PETSc_DIR}/include)
