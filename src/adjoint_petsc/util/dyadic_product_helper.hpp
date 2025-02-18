@@ -4,10 +4,11 @@
 #include <petscvec.h>
 #include <petscmat.h>
 
-#include "base.hpp"
-#include "codi_def.hpp"
+#include <adjoint_petsc/util/base.hpp>
+#include <adjoint_petsc/util/codi_def.hpp>
+#include <adjoint_petsc/util/petsc_missing.h>
+
 #include "mat_iterator_util.hpp"
-#include "petsc_missing.h"
 
 AP_NAMESPACE_START
 

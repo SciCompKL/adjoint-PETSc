@@ -17,6 +17,7 @@ add_executable(adjoint_petsc_tests
   )
 
 target_link_libraries(adjoint_petsc_tests PUBLIC gtest adjoint_petsc)
+target_include_directories(adjoint_petsc_tests PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../src)
 
 set_property(TARGET adjoint_petsc_tests PROPERTY CROSSCOMPILING_EMULATOR '${PETSc_DIR}/bin/mpirun -n 2')
 gtest_discover_tests(adjoint_petsc_tests)

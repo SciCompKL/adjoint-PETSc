@@ -1,8 +1,8 @@
 #pragma once
 
-#include "../../../include/adjoint_petsc/util/base.hpp"
-#include "../../../include/adjoint_petsc/util/codi_def.hpp"
-#include "../../../include/adjoint_petsc/mat.h"
+#include <adjoint_petsc/util/base.hpp>
+#include <adjoint_petsc/util/codi_def.hpp>
+#include <adjoint_petsc/mat.h>
 
 AP_NAMESPACE_START
 

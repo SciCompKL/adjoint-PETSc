@@ -1,4 +1,4 @@
-#include "../../../include/adjoint_petsc/util/addata_helper.hpp"
+#include <adjoint_petsc/util/addata_helper.hpp>
 
 #include <algorithm>
 

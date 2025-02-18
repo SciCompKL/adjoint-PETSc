@@ -1,7 +1,6 @@
-
-#include "../../include/adjoint_petsc/vec.h"
-#include "../../include/adjoint_petsc/util/petsc_missing.h"
-#include "../../include/adjoint_petsc/util/addata_helper.hpp"
+#include <adjoint_petsc/vec.h>
+#include <adjoint_petsc/util/petsc_missing.h>
+#include <adjoint_petsc/util/addata_helper.hpp>
 
 AP_NAMESPACE_START
 

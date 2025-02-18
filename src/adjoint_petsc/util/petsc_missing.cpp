@@ -1,8 +1,8 @@
 #include <vector>
 
-#include "../../../include/adjoint_petsc/util/petsc_missing.h"
+#include <adjoint_petsc/util/petsc_missing.h>
 
-#include "../../../include/adjoint_petsc/util/mat_iterator_util.hpp"
+#include "mat_iterator_util.hpp"
 
 
 

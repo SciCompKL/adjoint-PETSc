@@ -1,8 +1,8 @@
-#include "../../include/adjoint_petsc/ksp.h"
+#include <adjoint_petsc/ksp.h>
+#include <adjoint_petsc/util/addata_helper.hpp>
 
-#include "../../include/adjoint_petsc/util/addata_helper.hpp"
-#include "../../include/adjoint_petsc/util/mat_iterator_util.hpp"
-#include "../../include/adjoint_petsc/util/dyadic_product_helper.hpp"
+#include "util/mat_iterator_util.hpp"
+#include "util/dyadic_product_helper.hpp"
 
 AP_NAMESPACE_START
 

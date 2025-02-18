@@ -1,8 +1,8 @@
 #pragma once
 
-#include "../mat.h"
+#include <adjoint_petsc/mat.h>
 
-#include "../../../src/adjoint_petsc/impl/ad_mat_data.h"
+#include "../impl/ad_mat_data.h"
 
 AP_NAMESPACE_START
 
