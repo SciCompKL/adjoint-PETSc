@@ -21,6 +21,7 @@ add_library(adjoint_petsc
   src/adjoint_petsc/util/addata_helper.cpp
   src/adjoint_petsc/util/petsc_missing.cpp
   src/adjoint_petsc/vec.cpp
+  src/adjoint_petsc/impl/ad_mat_data.cpp
 )
 
 target_sources(adjoint_petsc

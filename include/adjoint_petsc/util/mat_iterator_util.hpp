@@ -2,64 +2,11 @@
 
 #include "../mat.h"
 
+#include "../../../src/adjoint_petsc/impl/ad_mat_data.h"
+
 AP_NAMESPACE_START
 
-
 namespace iterator_implementation {
-
-  template<typename Func>
-  PetscErrorCode MatSeqAIJAccessValue(Mat mat, PetscInt const* colmap, Identifier* ad_data, PetscInt row, PetscInt col, Func&& func) {
-    PetscInt const* row_offset;
-    PetscInt const* column_ids;
-    Real* values;
-    PetscMemType mem;
-
-    PetscCall(MatSeqAIJGetCSRAndMemType(mat, &row_offset, &column_ids, &values, &mem));
-
-    int cur_local_row = row;
-    int col_range = row_offset[cur_local_row + 1] - row_offset[cur_local_row];
-    int col_offset = row_offset[cur_local_row];
-
-    for(int cur_local_col = 0; cur_local_col < col_range; cur_local_col += 1) {
-      int cur_col = column_ids[cur_local_col + col_offset];
-      if(nullptr != colmap) {
-        cur_col = colmap[cur_col];
-      }
-
-      if(cur_col == col) {
-        Wrapper element = createRefType(values[cur_local_col + col_offset], ad_data[cur_local_col + col_offset]);
-        func(element);
-
-        return PETSC_SUCCESS;
-      }
-    }
-
-    return PETSC_ERR_USER_INPUT;
-  }
-
-  template<typename Func>
-  PetscErrorCode MatAIJAccessValue(Mat mat, Identifier* ad_data_d, Identifier* ad_data_o, PetscInt row, PetscInt col, Func&& func) {
-    Mat matd;
-    Mat mato;
-    PetscInt const* colmap;
-    PetscCall(MatMPIAIJGetSeqAIJ(mat, &matd, &mato, &colmap));
-
-    PetscInt col_low;
-    PetscInt col_high;
-    PetscCall(MatGetOwnershipRangeColumn(mat, &col_low, &col_high));
-    PetscInt row_low;
-    PetscInt row_high;
-    PetscCall(MatGetOwnershipRange(mat, &row_low, &row_high));
-
-    if(col_low <= col && col < col_high) {
-      PetscCall(MatSeqAIJAccessValue(matd, nullptr, ad_data_d, row - row_low, col - col_low, std::forward<Func>(func)));
-    } else {
-      PetscCall(MatSeqAIJAccessValue(mato, colmap, ad_data_o, row - row_low, col, std::forward<Func>(func)));
-    }
-
-    return PETSC_SUCCESS;
-  }
-
   template<typename T, typename = void>
   struct MatSeqAIJValueAccess {
 
@@ -80,16 +27,27 @@ namespace iterator_implementation {
   template<>
   struct MatSeqAIJValueAccess<ADMat> {
     MatSeqAIJValueAccess<Mat> mat_v;
-    ADMat                     mat;
+    ADMatSeqAIJData*          mat_i;
 
     std::array<char, sizeof(Wrapper)> wrapper;
 
-    MatSeqAIJValueAccess(ADMat mat) : mat_v(mat->mat), mat(mat) {}
+    MatSeqAIJValueAccess(ADMat mat) : mat_v(mat->mat), mat_i(ADMatSeqAIJData::cast(mat->mat_i)) {}
 
     Wrapper& value(PetscInt offset) {
-      new (wrapper.data()) Wrapper(mat_v.value(offset), mat->ad_data[offset]);
+      new (wrapper.data()) Wrapper(mat_v.value(offset), mat_i->index[offset]);
 
       return *reinterpret_cast<Wrapper*>(wrapper.data());
+    }
+  };
+
+  template<>
+  struct MatSeqAIJValueAccess<ADMatData*> {
+    ADMatSeqAIJData*          data;
+
+    MatSeqAIJValueAccess(ADMatData* data) : data(ADMatSeqAIJData::cast(data)) {}
+
+    Identifier& value(PetscInt offset) {
+      return data->index[offset];
     }
   };
 
@@ -166,16 +124,30 @@ namespace iterator_implementation {
 
       PetscCallVoid(MatMPIAIJGetSeqAIJ(mat->mat, &matd.mat, &mato.mat, nullptr));
 
-      // TODO: Very hacky. Improve when handling multiple data formats in ADMat.
-      matd.ad_data = mat->ad_data;
-      matd.ad_size = mat->ad_size_diag;
-
-      mato.ad_data = &mat->ad_data[mat->ad_size_diag];
-      mato.ad_size = mat->ad_size - mat->ad_size_diag;
+      ADMatAIJData* data = ADMatAIJData::cast(mat->mat_i);
+      matd.mat_i = &data->index_d;
+      mato.mat_i = &data->index_o;
     }
 
     auto accessMatD() { return MatSeqAIJValueAccess<ADMat>(&matd); };
     auto accessMatO() { return MatSeqAIJValueAccess<ADMat>(&mato); };
+  };
+
+  template<>
+  struct MatAIJValueAccess<ADMatData*> {
+    ADMatData* datad;
+    ADMatData* datao;
+
+    MatAIJValueAccess() = default;
+
+    MatAIJValueAccess(ADMatData* d) : MatAIJValueAccess() {
+      ADMatAIJData* data = ADMatAIJData::cast(d);
+      datad = &data->index_d;
+      datao = &data->index_o;
+    }
+
+    auto accessMatD() { return MatSeqAIJValueAccess<ADMatData*>(datad); };
+    auto accessMatO() { return MatSeqAIJValueAccess<ADMatData*>(datao); };
   };
 
 
@@ -209,6 +181,59 @@ namespace iterator_implementation {
     return PETSC_SUCCESS;
   }
 
+  template<typename Func, typename ... Values>
+  PetscErrorCode accessMatSeqAIJ(Func&& func, Mat mat, PetscInt const* colmap, PetscInt row, PetscInt col, MatSeqAIJValueAccess<Values>&& ... values) {
+
+    PetscInt const* row_offset;
+    PetscInt const* column_ids;
+    PetscMemType mem;
+
+    PetscCall(MatSeqAIJGetCSRAndMemType(mat, &row_offset, &column_ids, nullptr, &mem));
+
+    int cur_local_row = row;
+    int col_range = row_offset[cur_local_row + 1] - row_offset[cur_local_row];
+    int col_offset = row_offset[cur_local_row];
+
+    for(int cur_local_col = 0; cur_local_col < col_range; cur_local_col += 1) {
+      int cur_col = column_ids[cur_local_col + col_offset];
+      if(nullptr != colmap) {
+        cur_col = colmap[cur_col];
+      }
+
+      if(cur_col == col) {
+        func(values.value(cur_local_col + col_offset)...);
+
+        return PETSC_SUCCESS;
+      }
+    }
+
+    return PETSC_ERR_USER_INPUT;
+  }
+
+  template<typename Func, typename ... Values>
+  PetscErrorCode accessMatAIJ(Func&& func, PetscInt row, PetscInt col, Mat mat, MatAIJValueAccess<Values>&& ... values) {
+
+    Mat matd;
+    Mat mato;
+    PetscInt const* colmap;
+    PetscCall(MatMPIAIJGetSeqAIJ(mat, &matd, &mato, &colmap));
+
+    PetscInt col_low;
+    PetscInt col_high;
+    PetscCall(MatGetOwnershipRangeColumn(mat, &col_low, &col_high));
+    PetscInt row_low;
+    PetscInt row_high;
+    PetscCall(MatGetOwnershipRange(mat, &row_low, &row_high));
+
+    if(col_low <= col && col < col_high) {
+      PetscCall(accessMatSeqAIJ(std::forward<Func>(func), matd, nullptr, row - row_low, col - col_low, values.accessMatD()...));
+    } else {
+      PetscCall(accessMatSeqAIJ(std::forward<Func>(func), mato, colmap, row - row_low, col, values.accessMatO()...));
+    }
+
+    return PETSC_SUCCESS;
+  }
+
   inline Mat getUnderlyingMat(Mat   mat) { return mat; }
   inline Mat getUnderlyingMat(ADMat mat) { return mat->mat; }
 }
@@ -225,11 +250,18 @@ PetscErrorCode PetscObjectIterateAllEntries(Func&& func, First&& mat, Other&& ..
     );
 }
 
-template<typename Func>
-PetscErrorCode ADMatAccessValue(ADMat mat, PetscInt row, PetscInt col, Func&& func) {
+template<typename Func, typename First, typename ... Other>
+PetscErrorCode ADMatAccessValue(Func&& func, PetscInt row, PetscInt col, First&& mat, Other&& ... other) {
   // TODO: Check matrix type and select iterator
 
-  return iterator_implementation::MatAIJAccessValue(mat->mat, mat->ad_data, &mat->ad_data[mat->ad_size_diag], row, col, std::forward<Func>(func));
+  return iterator_implementation::accessMatAIJ(
+      func,
+      row,
+      col,
+      iterator_implementation::getUnderlyingMat(std::forward<First>(mat)),
+      iterator_implementation::MatAIJValueAccess<std::remove_cvref_t<First>>(std::forward<First>(mat)),
+      iterator_implementation::MatAIJValueAccess<std::remove_cvref_t<Other>>(std::forward<Other>(other))...
+      );
 }
 
 AP_NAMESPACE_END

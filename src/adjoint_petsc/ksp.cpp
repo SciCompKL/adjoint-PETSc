@@ -64,27 +64,33 @@ struct ADData_KSPSolve : public ReverseDataBase<ADData_KSPSolve> {
   std::vector<Real> x_v;
   AdjointVecData    x_i;
 
-  ADMat             A;
+  Mat               A_v;
+  ADMatData*        A_i;
   Mat               P_v;
 
   SharedKSP ksp;
 
-  ADData_KSPSolve(ADKSP ksp, ADVec b, ADVec x) : b_i(b), x_v(0), x_i(x), A(), P_v(), ksp(ksp->ksp) {
+  ADData_KSPSolve(ADKSP ksp, ADVec b, ADVec x) : b_i(b), x_v(0), x_i(x), A_v(), A_i(), P_v(), ksp(ksp->ksp) {
     x_v.resize(x_i.ids.size());
     PetscCallVoid(AdjointVecData::extractPrimal(x, x_v.data()));
 
-    ADMatCopyForReverse(ksp->Amat, &A);
+    ADMatCopyForReverse(ksp->Amat, &A_v, &A_i);
 
     PetscObjectId id_A;
     PetscObjectId id_P;
     PetscObjectGetId((PetscObject)ksp->Amat->mat, &id_A);
     PetscObjectGetId((PetscObject)ksp->Pmat->mat, &id_P);
     if(id_A == id_P) {
-      P_v = A->mat;
+      P_v = A_v;
     }
     else {
       PetscCallVoid(MatDuplicate(ksp->Pmat->mat, MAT_COPY_VALUES, &P_v));
     }
+  }
+
+  ~ADData_KSPSolve() {
+    PetscCallVoid(MatDestroy(&A_v));
+    delete A_i;
   }
 
   // TODO: Properly delete stuff
@@ -98,25 +104,27 @@ struct ADData_KSPSolve : public ReverseDataBase<ADData_KSPSolve> {
 
     PetscCallVoid(x_i.createAdjoint(&x_b, 1));
     PetscCallVoid(b_i.createAdjoint(&b_b, 1));
-    PetscCallVoid(MatDuplicate(A->mat, MAT_SHARE_NONZERO_PATTERN, &A_b));
+    PetscCallVoid(MatDuplicate(A_v, MAT_SHARE_NONZERO_PATTERN, &A_b));
 
     PetscCallVoid(VecGetOwnershipRange(b_b, &low, nullptr));
 
-    PetscCallVoid(KSPSetOperators(*ksp.get(), A->mat, P_v));
+    PetscCallVoid(KSPSetOperators(*ksp.get(), A_v, P_v));
 
     DyadicProductHelper dyadic = {};
-    dyadic.init(A->mat, b_b);
+    dyadic.init(A_v, b_b);
 
     int dim = vi->getVectorSize();
 
     int cur_dim = 0;
-    auto dyadic_update = [&] (PetscInt row, PetscInt col, Wrapper& value) {
+    auto dyadic_update = [&] (PetscInt row, PetscInt col, Real& value, Identifier& id) {
+      (void) value;
+
       Real entry_x_v;
       Real entry_b_b;
       entry_x_v = x_v[row - low];
       PetscCallVoid(dyadic.getValue(b_b, col, &entry_b_b));
 
-      vi->updateAdjoint(value.getIdentifier(), cur_dim, -entry_x_v * entry_b_b);
+      vi->updateAdjoint(id, cur_dim, -entry_x_v * entry_b_b);
     };
     for(; cur_dim < dim; cur_dim += 1) {
       x_i.getAdjoint(x_b, vi, cur_dim);
@@ -125,7 +133,7 @@ struct ADData_KSPSolve : public ReverseDataBase<ADData_KSPSolve> {
       b_i.updateAdjoint(b_b, vi, cur_dim);
 
       dyadic.communicateValues(b_b);
-      PetscCallVoid(PetscObjectIterateAllEntries(dyadic_update, A));
+      PetscCallVoid(PetscObjectIterateAllEntries(dyadic_update, A_v, A_i));
     }
 
     PetscCallVoid(x_i.freeAdjoint(&x_b));

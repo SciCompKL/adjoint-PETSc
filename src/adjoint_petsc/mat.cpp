@@ -186,7 +186,7 @@ struct ADData_MatSetValues {
           tape.deactivateValue(value);
         }
       };
-      PetscCallVoid(ADMatAccessValue(mat, cur.row, cur.col, func));
+      PetscCallVoid(ADMatAccessValue(func, cur.row, cur.col, mat));
 
       pos += 1;
     }
@@ -365,7 +365,7 @@ PetscErrorCode MatCreateAIJ(MPI_Comm comm, PetscInt m, PetscInt n, PetscInt M, P
 
 PetscErrorCode MatDestroy(ADMat* mat) {
 
-  if((*mat)->ad_size != 0) {
+  if(nullptr != (*mat)->mat_i) {
     Tape& tape = Number::getTape();
     PetscObjectIterateAllEntries([&](PetscInt row, PetscInt col, Wrapper& el) {
       (void)row;
@@ -373,7 +373,7 @@ PetscErrorCode MatDestroy(ADMat* mat) {
       tape.deactivateValue(el);
     }, *mat);
 
-    delete [] (*mat)->ad_data;
+    delete (*mat)->mat_i;
   }
 
   PetscCall(MatDestroy(&(*mat)->mat));
@@ -431,7 +431,7 @@ PetscErrorCode MatGetValues(ADMat mat, PetscInt m, const PetscInt idxm[], PetscI
       auto func = [&] (Wrapper& wrap) {
         v[row * n + col] = wrap;
       };
-      PetscCall(ADMatAccessValue(mat, idxm[row], idxn[col], func));
+      PetscCall(ADMatAccessValue(func, idxm[row], idxn[col], mat));
     }
   }
 
@@ -448,20 +448,23 @@ PetscErrorCode MatMPIAIJSetPreallocation(ADMat B, PetscInt d_nz, const PetscInt 
 
 struct ADData_MatMult : public ReverseDataBase<ADData_MatMult> {
 
-  ADMat          A;
+  Mat            A_v;
+  ADMatData*     A_i;
   Vec            x_v;
   AdjointVecData x_i;
   AdjointVecData y_i;
 
-  ADData_MatMult(ADMat A, ADVec x, ADVec y) : A(), x_v(), x_i(x), y_i(y) {
+  ADData_MatMult(ADMat A, ADVec x, ADVec y) : A_v(), A_i(), x_v(), x_i(x), y_i(y) {
     PetscCallVoid(VecDuplicate(x->vec, &x_v));
     PetscCallVoid(VecCopy(x->vec, x_v));
 
-    ADMatCopyForReverse(A, &this->A);
+    ADMatCopyForReverse(A, &A_v, &A_i);
   }
 
   ~ADData_MatMult() {
     PetscCallVoid(VecDestroy(&x_v));
+    PetscCallVoid(MatDestroy(&A_v));
+    delete A_i;
   }
 
   // TODO: Properly delete stuff.
@@ -472,32 +475,32 @@ struct ADData_MatMult : public ReverseDataBase<ADData_MatMult> {
     Mat A_b;
     PetscCallVoid(x_i.createAdjoint(&x_b, 1));
     PetscCallVoid(y_i.createAdjoint(&y_b, 1));
-    PetscCallVoid(MatDuplicate(A->mat, MAT_SHARE_NONZERO_PATTERN, &A_b));
+    PetscCallVoid(MatDuplicate(A_v, MAT_SHARE_NONZERO_PATTERN, &A_b));
 
     DyadicProductHelper dyadic = {};
-    dyadic.init(A->mat, x_v);
+    dyadic.init(A_v, x_v);
     PetscCallVoid(dyadic.communicateValues(x_v));
 
     int dim = vi->getVectorSize();
 
 
     int cur_dim = 0;
-    auto dyadic_update = [&] (PetscInt row, PetscInt col, Wrapper& value) {
+    auto dyadic_update = [&] (PetscInt row, PetscInt col, Real& value, Identifier& id) {
       Real entry_y_b;
       Real entry_x_v;
       PetscCallVoid(VecGetValues(y_b, 1, &row, &entry_y_b));
       PetscCallVoid(dyadic.getValue(x_v, col, &entry_x_v));
 
-      vi->updateAdjoint(value.getIdentifier(), cur_dim, entry_y_b * entry_x_v);
+      vi->updateAdjoint(id, cur_dim, entry_y_b * entry_x_v);
     };
 
     for(; cur_dim < dim; cur_dim += 1) {
       y_i.getAdjoint(y_b, vi, cur_dim);
 
-      PetscCallVoid(MatMultTranspose(A->mat, y_b, x_b));
+      PetscCallVoid(MatMultTranspose(A_v, y_b, x_b));
       x_i.updateAdjoint(x_b, vi, cur_dim);
 
-      PetscCallVoid(PetscObjectIterateAllEntries(dyadic_update, A));
+      PetscCallVoid(PetscObjectIterateAllEntries(dyadic_update, A_v, A_i));
     }
 
     PetscCallVoid(x_i.freeAdjoint(&x_b));
@@ -518,24 +521,30 @@ PetscErrorCode MatMult(ADMat mat, ADVec x, ADVec y) {
 
 struct ADData_MatNorm : public ReverseDataBase<ADData_MatNorm> {
 
-  ADMat         x;
+  Mat           x_v;
+  ADMatData*    x_i;
   NormType      type;
   Real          v_v;
   Identifier    v_i;
 
-  ADData_MatNorm(ADMat x, NormType type, Number* v) : x(), type(type), v_v(v->getValue()), v_i() {
+  ADData_MatNorm(ADMat x, NormType type, Number* v) : x_v(), x_i(), type(type), v_v(v->getValue()), v_i() {
 
     Number::getTape().registerExternalFunctionOutput(*v);
     v_i = v->getIdentifier();
 
-    ADMatCopyForReverse(x, &this->x);
+    ADMatCopyForReverse(x, &x_v, &x_i);
+  }
+
+  ~ADData_MatNorm() {
+    PetscCallVoid(MatDestroy(&x_v));
+    delete x_i;
   }
 
   void reverse(Tape* tape, VectorInterface* vi) {
     int dim = vi->getVectorSize();
 
     MPI_Comm comm;
-    PetscObjectGetComm((PetscObject)x->mat, &comm);
+    PetscObjectGetComm((PetscObject)x_v, &comm);
 
     // Get the lhs adjoint.
     std::vector<Real> v_b(dim);
@@ -550,11 +559,11 @@ struct ADData_MatNorm : public ReverseDataBase<ADData_MatNorm> {
       if(type == NORM_1) {
         PetscInt col_size;
         PetscInt row_size;
-        PetscCallVoid(MatGetSize(x->mat, &row_size, &col_size));
+        PetscCallVoid(MatGetSize(x_v, &row_size, &col_size));
 
 
         std::vector<Real> col_sums(col_size);
-        PetscCallVoid(MatGetColumnSumAbs(x->mat, col_sums.data()));
+        PetscCallVoid(MatGetColumnSumAbs(x_v, col_sums.data()));
 
         PetscInt cur_col = 0;
         for(Real const& value_col : col_sums) {
@@ -567,12 +576,12 @@ struct ADData_MatNorm : public ReverseDataBase<ADData_MatNorm> {
       else if(type == NORM_INFINITY) {
         PetscInt low;
         PetscInt high;
-        PetscCallVoid(MatGetOwnershipRange(x->mat, &low, &high));
+        PetscCallVoid(MatGetOwnershipRange(x_v, &low, &high));
         PetscInt range = high - low;
 
         Vec row_sums;
-        PetscCallVoid(MatCreateVecs(x->mat, &row_sums, NULL));
-        PetscCallVoid(MatGetRowSumAbs(x->mat, row_sums));
+        PetscCallVoid(MatCreateVecs(x_v, &row_sums, NULL));
+        PetscCallVoid(MatGetRowSumAbs(x_v, row_sums));
 
         Real* row_sums_values;
         PetscCallVoid(VecGetArray(row_sums, &row_sums_values));
@@ -588,33 +597,33 @@ struct ADData_MatNorm : public ReverseDataBase<ADData_MatNorm> {
       }
 
       // Iterate and perform the adjoint update.
-      auto func = [&](PetscInt row, PetscInt col, Wrapper& value) {
+      auto func = [&](PetscInt row, PetscInt col, Real& value, Identifier& id) {
         PetscInt sel = type == NORM_1 ? col : row;
         if(selected.end() == selected.find(sel)) {
           return;
         }
 
         Real jac = 0.0;
-        if(value.getValue() < 0.0) {
+        if(value < 0.0) {
           jac = -1.0;
         }
-        else if(value.getValue() > 0.0) {
+        else if(value > 0.0) {
           jac = 1.0;
         }
 
         for(int i = 0; i < dim; i += 1) {
-          vi->updateAdjoint(value.getIdentifier(), i, v_b[i] * jac);
+          vi->updateAdjoint(id, i, v_b[i] * jac);
         }
       };
-      PetscObjectIterateAllEntries(func, x);
+      PetscObjectIterateAllEntries(func, x_v, x_i);
     }
     else if(type == NORM_FROBENIUS) {
-      auto func = [&](PetscInt row, PetscInt col, Wrapper& value) {
+      auto func = [&](PetscInt row, PetscInt col, Real& value, Identifier& id) {
         for(int i = 0; i < dim; i += 1) {
-          vi->updateAdjoint(value.getIdentifier(), i, v_b[i] * value.value() / v_v);
+          vi->updateAdjoint(id, i, v_b[i] * value / v_v);
         }
       };
-      PetscObjectIterateAllEntries(func, x);
+      PetscObjectIterateAllEntries(func, x_v, x_i);
     }
     else {
       // TODO: Throw error
@@ -718,21 +727,14 @@ void ADMatCreateADData(ADMat mat) {
   PetscInt off_diag_size;
 
   PetscCallVoid(MatAIJGetEntrySize(mat->mat, &diag_size, &off_diag_size));
-
-  mat->ad_size = diag_size + off_diag_size;
-  mat->ad_size_diag = diag_size;
-  mat->ad_data = new Identifier[mat->ad_size];
-  memset(mat->ad_data, 0, sizeof(Identifier) * mat->ad_size);
+  mat->mat_i = new ADMatAIJData(diag_size, off_diag_size);
 }
 
-void ADMatCopyForReverse(ADMat mat, ADMat* newm) {
-  *newm = new ADMatImpl();
+void ADMatCopyForReverse(ADMat mat, Mat* newm, ADMatData** newd) {
 
-  PetscCallVoid(MatDuplicate(mat->mat, MAT_COPY_VALUES, &(*newm)->mat));
+  PetscCallVoid(MatDuplicate(mat->mat, MAT_COPY_VALUES, newm));
 
-  ADMatCreateADData(*newm);
-
-  std::copy(mat->ad_data, &mat->ad_data[mat->ad_size], (*newm)->ad_data);
+  *newd = mat->mat_i->clone();
 }
 
 AP_NAMESPACE_END

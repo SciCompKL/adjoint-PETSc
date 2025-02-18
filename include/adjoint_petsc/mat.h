@@ -8,19 +8,24 @@
 
 AP_NAMESPACE_START
 
-using FuncMatCreate = std::function<PetscErrorCode(Mat* mat)>;
-using FuncMatInit   = std::function<PetscErrorCode(Mat mat)>;
+struct ADMatData {
+
+  int type;
+
+  ADMatData(int type);
+  ADMatData(ADMatData const&) = default;
+
+  virtual ~ADMatData() {};
+  virtual ADMatData* clone() = 0;
+
+};
 
 struct ADMatImpl {
   Mat mat;
 
-  Identifier* ad_data;
-  int ad_size;
-  int ad_size_diag;
-  void* transaction_data;
+  ADMatData* mat_i;
 
-  FuncMatCreate createFunc;
-  FuncMatInit   initFunc;
+  void* transaction_data;
 };
 
 using ADMat = ADMatImpl*;
@@ -53,6 +58,6 @@ PetscErrorCode MatView                   (ADMat mat, PetscViewer viewer);
 PetscErrorCode MatZeroEntries            (ADMat mat);
 
 void ADMatCreateADData  (ADMat mat);
-void ADMatCopyForReverse(ADMat mat, ADMat* newm);
+void ADMatCopyForReverse(ADMat mat, Mat* newm, ADMatData** newd);
 
 AP_NAMESPACE_END
