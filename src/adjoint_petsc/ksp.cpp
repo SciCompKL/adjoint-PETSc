@@ -125,7 +125,7 @@ struct ADData_KSPSolve : public ReverseDataBase<ADData_KSPSolve> {
       b_i.updateAdjoint(b_b, vi, cur_dim);
 
       dyadic.communicateValues(b_b);
-      PetscCallVoid(ADObjIterateAllEntries(A, dyadic_update));
+      PetscCallVoid(PetscObjectIterateAllEntries(dyadic_update, A));
     }
 
     PetscCallVoid(x_i.freeAdjoint(&x_b));

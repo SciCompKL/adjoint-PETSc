@@ -367,11 +367,11 @@ PetscErrorCode MatDestroy(ADMat* mat) {
 
   if((*mat)->ad_size != 0) {
     Tape& tape = Number::getTape();
-    ADObjIterateAllEntries(*mat, [&](PetscInt row, PetscInt col, Wrapper& el) {
+    PetscObjectIterateAllEntries([&](PetscInt row, PetscInt col, Wrapper& el) {
       (void)row;
       (void)col;
       tape.deactivateValue(el);
-    });
+    }, *mat);
 
     delete [] (*mat)->ad_data;
   }
@@ -394,7 +394,7 @@ PetscErrorCode MatDuplicate(ADMat mat, MatDuplicateOption op, ADMat* newv) {
     auto func = [&] (PetscInt row, PetscInt col, Wrapper& a, Wrapper& b) {
       b = a;
     };
-    PetscCall(ADObjIterateAllEntries(mat, *newv, func));
+    PetscCall(PetscObjectIterateAllEntries(func, mat, *newv));
   }
 
   return PETSC_SUCCESS;
@@ -464,6 +464,8 @@ struct ADData_MatMult : public ReverseDataBase<ADData_MatMult> {
     PetscCallVoid(VecDestroy(&x_v));
   }
 
+  // TODO: Properly delete stuff.
+
   void reverse(Tape* tape, VectorInterface* vi) {
     Vec x_b;
     Vec y_b;
@@ -495,7 +497,7 @@ struct ADData_MatMult : public ReverseDataBase<ADData_MatMult> {
       PetscCallVoid(MatMultTranspose(A->mat, y_b, x_b));
       x_i.updateAdjoint(x_b, vi, cur_dim);
 
-      PetscCallVoid(ADObjIterateAllEntries(A, dyadic_update));
+      PetscCallVoid(PetscObjectIterateAllEntries(dyadic_update, A));
     }
 
     PetscCallVoid(x_i.freeAdjoint(&x_b));
@@ -604,7 +606,7 @@ struct ADData_MatNorm : public ReverseDataBase<ADData_MatNorm> {
           vi->updateAdjoint(value.getIdentifier(), i, v_b[i] * jac);
         }
       };
-      ADObjIterateAllEntries(x, func);
+      PetscObjectIterateAllEntries(func, x);
     }
     else if(type == NORM_FROBENIUS) {
       auto func = [&](PetscInt row, PetscInt col, Wrapper& value) {
@@ -612,7 +614,7 @@ struct ADData_MatNorm : public ReverseDataBase<ADData_MatNorm> {
           vi->updateAdjoint(value.getIdentifier(), i, v_b[i] * value.value() / v_v);
         }
       };
-      ADObjIterateAllEntries(x, func);
+      PetscObjectIterateAllEntries(func, x);
     }
     else {
       // TODO: Throw error
@@ -680,7 +682,7 @@ PetscErrorCode MatZeroEntries(ADMat mat) {
   auto func = [&] (PetscInt row, PetscInt col, Wrapper& value) {
     value = Real();
   };
-  return ADObjIterateAllEntries(mat, func);
+  return PetscObjectIterateAllEntries(func, mat);
 }
 
 PetscErrorCode MatSeqAIJGetEntrySize(Mat mat, PetscInt* entries) {

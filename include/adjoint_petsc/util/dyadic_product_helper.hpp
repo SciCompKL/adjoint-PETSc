@@ -30,7 +30,7 @@ struct DyadicProductHelper {
         col_list.insert(col);
       }
     };
-    PetscCall(PetscObjectIterateAllEntries(A, dyadic_init));
+    PetscCall(PetscObjectIterateAllEntries(dyadic_init, A));
 
     col_vec.reserve(col_list.size());
 
