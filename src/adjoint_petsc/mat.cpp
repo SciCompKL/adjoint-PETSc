@@ -460,6 +460,10 @@ struct ADData_MatMult : public ReverseDataBase<ADData_MatMult> {
     ADMatCopyForReverse(A, &this->A);
   }
 
+  ~ADData_MatMult() {
+    PetscCallVoid(VecDestroy(&x_v));
+  }
+
   void reverse(Tape* tape, VectorInterface* vi) {
     Vec x_b;
     Vec y_b;
@@ -496,6 +500,8 @@ struct ADData_MatMult : public ReverseDataBase<ADData_MatMult> {
 
     PetscCallVoid(x_i.freeAdjoint(&x_b));
     PetscCallVoid(y_i.freeAdjoint(&y_b));
+
+    PetscCallVoid(MatDestroy(&A_b));
   }
 };
 

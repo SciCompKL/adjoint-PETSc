@@ -130,6 +130,8 @@ struct ADData_KSPSolve : public ReverseDataBase<ADData_KSPSolve> {
 
     PetscCallVoid(x_i.freeAdjoint(&x_b));
     PetscCallVoid(b_i.freeAdjoint(&b_b));
+
+    PetscCallVoid(MatDestroy(&A_b));
   }
 };
 
