@@ -88,6 +88,8 @@ TEST_F(MatSetup, Duplicate) {
   EXPECT_EQ(s[0].getGradient(), ENTRIES_PER_RANK * (100.0 + 10.0 * mpi_rank));
   EXPECT_EQ(s[1].getGradient(), (ENTRIES_PER_RANK - 1) * (10000.0 + 10.0 * mpi_rank) + (10000.0 + 10.0 * mpi_rank_next));
   EXPECT_EQ(s[2].getGradient(), ENTRIES_PER_RANK * (1000.0 + 10.0 * mpi_rank));
+
+  PetscCallVoid(MatDestroy(&c));
 }
 
 TEST_F(MatSetup, GetValues) {

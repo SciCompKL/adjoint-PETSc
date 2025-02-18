@@ -346,7 +346,7 @@ struct ADData_VecDot : public ReverseDataBase<ADData_VecDot> {
     MPI_Allreduce(MPI_IN_PLACE, adj.data(), dim, MPI_DOUBLE, MPI_SUM, comm);
 
     for(size_t i = 0; i < x_i.size(); i += 1) {
-      for(size_t d = 0; d < dim; d += 1) {
+      for(int d = 0; d < dim; d += 1) {
         vi->updateAdjoint(x_i[i], d, y_v[i] * adj[d]);
         vi->updateAdjoint(y_i[i], d, x_v[i] * adj[d]);
       }
@@ -480,7 +480,7 @@ struct ADData_VecNorm : public ReverseDataBase<ADData_VecNorm> {
   std::vector<Identifier> x_i;
 
   ADData_VecNorm(ADVec x, NormType type, Number* val) : comm(MPI_COMM_NULL), val_i(), val_v(val->getValue()),
-      type(type), x_i(x->ad_size), x_v(x->ad_size) {
+      type(type), x_v(x->ad_size), x_i(x->ad_size) {
     PetscCallVoid(PetscObjectGetComm((PetscObject)x->vec, &comm));
 
 

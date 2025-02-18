@@ -217,7 +217,6 @@ struct ADData_MatSetValues {
 
   static void assemble_reverse(Tape* tape, void* d, VectorInterface* va) {
     ADData_MatSetValues* data = (ADData_MatSetValues*)d;
-    int ad_vec_size = va->getVectorSize();
 
     data->adjoint_step = (int)data->step_boundaries.size() - 1;
 
@@ -314,7 +313,7 @@ struct ADData_MatSetValues {
     std::vector<PetscInt> lookup_reverse(lhs_in_positions.size());
     i = 0;
     for(PetscInt& cur : lookup) {
-      lookup_reverse[lookup[i]] = i;
+      lookup_reverse[cur] = i;
       i += 1;
     }
 
