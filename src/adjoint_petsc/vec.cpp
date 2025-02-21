@@ -818,4 +818,41 @@ void ADVecCreateADData(ADVec vec) {
   }
 }
 
+struct ADData_ViewReverse : public ReverseDataBase<ADData_ViewReverse> {
+
+  AdjointVecData vec_i;
+  std::string m;
+  int id;
+  PetscViewer viewer;
+
+  ADData_ViewReverse(ADVec vec, std::string m, int id, PetscViewer viewer) : vec_i(vec), m(m), id(id), viewer(viewer) {}
+
+
+  void reverse(Tape* tape, VectorInterface* vi) {
+    Vec vec_b;
+    PetscCallVoid(vec_i.createAdjoint(&vec_b, 1));
+
+    int dim = vi->getVectorSize();
+
+    std::cout << m << " reverse id: " << id << std::endl;
+    for(int cur_dim = 0; cur_dim < dim; cur_dim += 1) {
+      vec_i.getAdjoint(vec_b, vi, cur_dim);
+      PetscCallVoid(VecView(vec_b, viewer));
+    }
+
+    PetscCallVoid(vec_i.freeAdjoint(&vec_b));
+  }
+};
+
+void ADVecViewReverse(ADVec vec, std::string m, int id, PetscViewer viewer) {
+  ADData_ViewReverse* data = new ADData_ViewReverse(vec, m, id, viewer);
+  data->push();
+}
+void ADVecViewReverse(Vec vec, std::string m, int id, PetscViewer viewer) {
+  (void)vec;
+  (void)m;
+  (void)id;
+  (void)viewer;
+}
+
 AP_NAMESPACE_END
