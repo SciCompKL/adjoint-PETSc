@@ -46,8 +46,8 @@ struct VecSetup : public testing::Test {
 
   void initVec(adjoint_petsc::ADVec* vec) {
     PetscCallVoid(VecCreate(PETSC_COMM_WORLD, vec));
-    PetscCallVoid(VecSetFromOptions(*vec));
     PetscCallVoid(VecSetSizes(*vec, ENTRIES_PER_RANK, ENTRIES_PER_RANK * mpi_size));
+    PetscCallVoid(VecSetFromOptions(*vec));
   }
 
   PetscErrorCode setVector(adjoint_petsc::ADVec vec, int size, adjoint_petsc::Number* s) {

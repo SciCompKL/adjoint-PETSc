@@ -91,6 +91,9 @@ struct ADData_SetValues {
   void addEntries(PetscInt ssize, PetscInt const* list, Number const* values) {
     step_boundaries.push_back((int)rhs_data.size());
     for (int i = 0; i < ssize; i += 1) {
+      if(list[i] < 0) {
+        continue;
+      }
       addEntry(list[i], values[i]);
     }
 
@@ -254,6 +257,7 @@ PetscErrorCode VecAssemblyEnd  (ADVec vec) {
       ADData_SetValues* data = reinterpret_cast<ADData_SetValues*>(vec->transaction_data);
 
       data->finalize(vec);
+      vec->transaction_data = nullptr;
     }
 
     return r;
@@ -662,6 +666,8 @@ PetscErrorCode VecSetFromOptions(ADVec vec) {
     PetscCall(VecSetFromOptions(v)); return PETSC_SUCCESS;
   };
 
+  ADVecCreateADData(vec);
+
   return PETSC_SUCCESS;
 }
 
@@ -672,8 +678,6 @@ PetscErrorCode VecSetOption(ADVec x, VecOption op, PetscBool flag) {
 PetscErrorCode VecSetSizes(ADVec vec, PetscInt m, PetscInt M) {
   PetscCall(VecSetSizes(vec->vec, m, M));
 
-  ADVecCreateADData(vec);
-
   return PETSC_SUCCESS;
 }
 
@@ -682,6 +686,8 @@ PetscErrorCode VecSetType(ADVec vec, VecType newType) {
   vec->initFunc = [newType] (Vec v) -> PetscErrorCode {
     PetscCall(VecSetType(v, newType)); return PETSC_SUCCESS;
   };
+
+  ADVecCreateADData(vec);
 
   return PETSC_SUCCESS;
 }

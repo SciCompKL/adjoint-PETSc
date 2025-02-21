@@ -124,7 +124,11 @@ struct ADData_MatSetValues {
   void addEntries(PetscInt m, PetscInt const* idxm, PetscInt n, PetscInt const* idxn, Number const* values) {
     step_boundaries.push_back((int)rhs_data.size());
     for (int cur_row = 0; cur_row < m; cur_row += 1) {
+      if(idxm[cur_row] < 0) { continue; }
+
       for (int cur_col = 0; cur_col < n; cur_col += 1) {
+        if(idxn[cur_col] < 0) { continue; }
+
         addEntry(idxm[cur_row], idxn[cur_col], values[cur_row * n + cur_col]);
       }
     }
@@ -338,6 +342,7 @@ PetscErrorCode MatAssemblyEnd(ADMat mat, MatAssemblyType type) {
     ADData_MatSetValues* data = reinterpret_cast<ADData_MatSetValues*>(mat->transaction_data);
 
     data->finalize(mat);
+    mat->transaction_data = nullptr;
   }
 
   return PETSC_SUCCESS;
@@ -348,8 +353,9 @@ PetscErrorCode MatConvert                (ADMat mat, MatType newtype, MatReuse r
   return PETSC_SUCCESS;
 }
 
-PetscErrorCode MatCreate                 (MPI_Comm comm, ADMat* mat) {
-  throw std::runtime_error("'MatConvert' not implemented.");
+PetscErrorCode MatCreate(MPI_Comm comm, ADMat* mat) {
+  (*mat) = new ADMatImpl();
+  PetscCall(MatCreate(comm, &(*mat)->mat));
 
   return PETSC_SUCCESS;
 }
@@ -360,7 +366,11 @@ PetscErrorCode MatCreateAIJ(MPI_Comm comm, PetscInt m, PetscInt n, PetscInt M, P
 
   return PETSC_SUCCESS;
 }
-// PetscErrorCode MatCreateDense            (MPI_Comm comm, PetscInt m, PetscInt n, PetscInt M, PetscInt N, Number *data, ADMat *A);
+
+PetscErrorCode MatCreateDense(MPI_Comm comm, PetscInt m, PetscInt n, PetscInt M, PetscInt N, Number *data, ADMat *A) {
+  std::cout << "Not yet supported." << std::endl;
+  return PETSC_ERR_ARG_WRONGSTATE;
+}
 
 PetscErrorCode MatDestroy(ADMat* mat) {
 
