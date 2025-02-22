@@ -2,6 +2,8 @@
 #include <adjoint_petsc/util/petsc_missing.h>
 #include <adjoint_petsc/util/addata_helper.hpp>
 
+#include "util/vec_iterator_util.hpp"
+
 AP_NAMESPACE_START
 
 /*************************************************************
@@ -775,7 +777,14 @@ PetscErrorCode VecSum(ADVec x, Number* sum) {
 
 PetscErrorCode VecView(ADVec vec, PetscViewer viewer) {
   // TODO: Maybe add special AD output options.
-  return VecView(vec->vec, viewer);
+  auto func = [&](PetscInt row, Wrapper& value) {
+    (void)row;
+    std::cout << value.getIdentifier() << " " << value.getValue() << "\n";
+  };
+  VecIterateAllEntries(func, vec);
+  std::cout.flush();
+
+  return PETSC_SUCCESS;
 }
 
 PetscErrorCode VecWAXPY(ADVec w, Number alpha, ADVec x, ADVec y) {
@@ -832,12 +841,19 @@ struct ADData_ViewReverse : public ReverseDataBase<ADData_ViewReverse> {
     Vec vec_b;
     PetscCallVoid(vec_i.createAdjoint(&vec_b, 1));
 
+    PetscInt low;
+    PetscCallVoid(VecGetOwnershipRange(vec_b, &low, nullptr));
+
     int dim = vi->getVectorSize();
 
+    auto func = [&](PetscInt row, Real& value) {
+      std::cout << vec_i.ids[row - low] << " " << value << "\n";
+    };
     std::cout << m << " reverse id: " << id << std::endl;
     for(int cur_dim = 0; cur_dim < dim; cur_dim += 1) {
       vec_i.getAdjoint(vec_b, vi, cur_dim);
-      PetscCallVoid(VecView(vec_b, viewer));
+      VecIterateAllEntries(func, vec_b);
+      std::cout.flush();
     }
 
     PetscCallVoid(vec_i.freeAdjoint(&vec_b));
