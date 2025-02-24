@@ -692,8 +692,39 @@ PetscErrorCode MatSetValue(ADMat mat, PetscInt i, PetscInt j, Number v, InsertMo
   return MatSetValues(mat, 1, &i, 1, &j, &v, addv);
 }
 
+struct MatrixEntry {
+  PetscInt row;
+  PetscInt col;
+  Real value;
+
+  void print() {
+    std::cout << row << " " << col << " " << " " << value << "\n";
+  }
+};
+
 PetscErrorCode MatView(ADMat mat, PetscViewer viewer) {
-  return MatView(mat->mat, viewer);
+  std::vector<MatrixEntry> data = {};
+
+  std::cout.setf(std::ios::scientific);
+  std::cout.setf(std::ios::showpos);
+  std::cout.precision(12);
+  auto func = [&](PetscInt row, PetscInt col, Wrapper& value) {
+    data.push_back(MatrixEntry({row, col, value.value()}));
+  };
+  PetscInt M, N;
+  PetscCall(MatGetSize(mat, &M, &N));
+  std::cout << "Matrix of size " << M << "x" << N << std::endl;
+  PetscObjectIterateAllEntries(func, mat);
+
+  std::sort(data.begin(), data.end());
+  for(MatrixEntry& cur : data) {
+    cur.print();
+  }
+  std::cout.flush();
+
+  return PETSC_SUCCESS;
+
+  //return MatView(mat->mat, viewer);
 }
 
 PetscErrorCode MatZeroEntries(ADMat mat) {
@@ -744,6 +775,57 @@ void ADMatCopyForReverse(ADMat mat, Mat* newm, ADMatData** newd) {
   PetscCallVoid(MatDuplicate(mat->mat, MAT_COPY_VALUES, newm));
 
   *newd = mat->mat_i->clone();
+}
+
+struct ADData_MatViewReverse : public ReverseDataBase<ADData_MatViewReverse> {
+
+  Mat mat_v;
+  ADMatData* mat_i;
+  std::string m;
+  int id;
+  PetscViewer viewer;
+
+  ADData_MatViewReverse(ADMat mat, std::string m, int id, PetscViewer viewer) : mat_v(), mat_i(), m(m), id(id), viewer(viewer) {
+    ADMatCopyForReverse(mat, &mat_v, &mat_i);
+  }
+
+  void reverse(Tape* tape, VectorInterface* vi) {
+
+    int dim = vi->getVectorSize();
+
+    std::vector<MatrixEntry> data = {};
+    std::cout.setf(std::ios::scientific);
+    std::cout.setf(std::ios::showpos);
+    std::cout.precision(12);
+
+    int cur_dim = 0;
+    auto func = [&](PetscInt row, PetscInt col, Real& value, Identifier& id) {
+      data.push_back(MatrixEntry({row, col, vi->getAdjoint(id, cur_dim)}));
+    };
+    std::cout << m << " reverse id: m" << id << std::endl;
+    for(; cur_dim < dim; cur_dim += 1) {
+      PetscObjectIterateAllEntries(func, mat_v, mat_i);
+
+      std::sort(data.begin(), data.end());
+      for(MatrixEntry& cur : data) {
+        cur.print();
+      }
+
+      data.clear();
+      std::cout.flush();
+    }
+  }
+};
+
+void ADMatViewReverse(ADMat mat, std::string m, int id, PetscViewer viewer) {
+  ADData_MatViewReverse* data = new ADData_MatViewReverse(mat, m, id, viewer);
+  data->push();
+}
+void ADMatViewReverse(Mat mat, std::string m, int id, PetscViewer viewer) {
+  (void)mat;
+  (void)m;
+  (void)id;
+  (void)viewer;
 }
 
 AP_NAMESPACE_END
