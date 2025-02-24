@@ -497,8 +497,6 @@ struct ADData_MatMult : public ReverseDataBase<ADData_MatMult> {
     delete A_i;
   }
 
-  // TODO: Properly delete stuff.
-
   void reverse(Tape* tape, VectorInterface* vi) {
     Vec x_b;
     Vec y_b;
@@ -542,6 +540,8 @@ struct ADData_MatMult : public ReverseDataBase<ADData_MatMult> {
 
 PetscErrorCode MatMult(ADMat mat, ADVec x, ADVec y) {
   PetscCall(MatMult(mat->mat, x->vec, y->vec));
+
+  AdjointVecData::registerExternalFunctionOutput(y);
 
   ADData_MatMult* data = new ADData_MatMult(mat, x, y);
   data->push();

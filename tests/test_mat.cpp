@@ -120,6 +120,9 @@ TEST_F(MatSetup, GetValues) {
     EXPECT_EQ(values[i].getValue(), expected_values[i]);
     EXPECT_EQ(values[i + 4].getValue(), expected_values[i]);
 
+    tape->registerOutput(values[i]);
+    tape->registerOutput(values[i + 4]);
+
     values[i].setGradient(100 + 10 * mpi_rank);
     values[i + 4].setGradient(1000 + 10 * mpi_rank);
   }
@@ -152,9 +155,12 @@ TEST_F(MatSetup, Mult) {
   PetscCallVoid(VecGetArray(vec[1], &values));
 
   for(int i = 0; i < ENTRIES_PER_RANK; i += 1) {
-    EXPECT_EQ(values[i].getValue(), expected_values[i + mpi_rank * ENTRIES_PER_RANK]);
+    adjoint_petsc::Wrapper temp = values[i];
+    EXPECT_EQ(temp.getValue(), expected_values[i + mpi_rank * ENTRIES_PER_RANK]);
 
-    values[i].setGradient(100 + 10 * mpi_rank);
+    tape->registerOutput(temp);
+
+    temp.setGradient(100 + 10 * mpi_rank);
   }
 
   PetscCallVoid(VecRestoreArray(vec[1], &values));
@@ -193,6 +199,7 @@ void performNormTest(Test& test, NormType type, adjoint_petsc::Real expected_val
   PetscCallVoid(MatNorm(test.mat[0], type, &norm));
 
   EXPECT_DOUBLE_EQ(norm.getValue(), expected_value);
+  test.tape->registerOutput(norm);
   norm.setGradient(100 + 10 * test.mpi_rank);
 
   test.tape->evaluate();
