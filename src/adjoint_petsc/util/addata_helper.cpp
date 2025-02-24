@@ -2,6 +2,8 @@
 
 #include <algorithm>
 
+#include "../../../src/adjoint_petsc/util/vec_iterator_util.hpp"
+
 AP_NAMESPACE_START
 
 AdjointVecData::AdjointVecData(ADVec vec) : ids(vec->ad_size), global_size(0), createFunc(vec->createFunc), initFunc(vec->initFunc) {
@@ -55,6 +57,17 @@ PetscErrorCode AdjointVecData::updateAdjoint(Vec vec_b, VectorInterface* vi, Pet
   }
 
   PetscCall(VecRestoreArray(vec_b, &adjoint));
+
+  return PETSC_SUCCESS;
+}
+
+PetscErrorCode AdjointVecData::makePassive(ADVec vec) {
+  Tape& tape = Number::getTape();
+
+  auto func = [&](PetscInt row, Wrapper& value) {
+    tape.deactivateValue(value);
+  };
+  VecIterateAllEntries(func, vec);
 
   return PETSC_SUCCESS;
 }

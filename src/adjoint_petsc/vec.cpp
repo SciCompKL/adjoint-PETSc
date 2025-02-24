@@ -854,6 +854,22 @@ void ADVecCreateADData(ADVec vec) {
   }
 }
 
+void ADVecIsActive(ADVec vec, bool* a) {
+  Tape& tape = Number::getTape();
+
+  int active = 0;
+  auto func = [&](PetscInt row, Wrapper& value) {
+    active += tape.isIdentifierActive(value.getIdentifier());
+  };
+  PetscCallVoid(VecIterateAllEntries(func, vec));
+
+  MPI_Comm comm;
+  PetscCallVoid(PetscObjectGetComm((PetscObject)vec->vec, &comm));
+
+  MPI_Allreduce(MPI_IN_PLACE, &active, 1, MPI_INTEGER, MPI_SUM, comm);
+  *a = 0 != active;
+}
+
 struct ADData_ViewReverse : public ReverseDataBase<ADData_ViewReverse> {
 
   AdjointVecData vec_i;

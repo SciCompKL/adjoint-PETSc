@@ -541,10 +541,20 @@ struct ADData_MatMult : public ReverseDataBase<ADData_MatMult> {
 PetscErrorCode MatMult(ADMat mat, ADVec x, ADVec y) {
   PetscCall(MatMult(mat->mat, x->vec, y->vec));
 
-  AdjointVecData::registerExternalFunctionOutput(y);
+  bool active_mat;
+  bool active_x;
+  ADMatIsActive(mat, &active_mat);
+  ADVecIsActive(x, &active_x);
+  bool active_y = active_mat || active_x;
 
-  ADData_MatMult* data = new ADData_MatMult(mat, x, y);
-  data->push();
+  if(active_y) {
+    AdjointVecData::registerExternalFunctionOutput(y);
+
+    ADData_MatMult* data = new ADData_MatMult(mat, x, y);
+    data->push();
+  } else {
+    AdjointVecData::makePassive(y);
+  }
 
   return PETSC_SUCCESS;
 }
@@ -802,6 +812,22 @@ void ADMatCopyForReverse(ADMat mat, Mat* newm, ADMatData** newd) {
   PetscCallVoid(MatDuplicate(mat->mat, MAT_COPY_VALUES, newm));
 
   *newd = mat->mat_i->clone();
+}
+
+void ADMatIsActive(ADMat mat, bool* a) {
+  Tape& tape = Number::getTape();
+
+  int active = 0;
+  auto func = [&](PetscInt row, PetscInt col, Wrapper& value) {
+    active += tape.isIdentifierActive(value.getIdentifier());
+  };
+  PetscCallVoid(PetscObjectIterateAllEntries(func, mat));
+
+  MPI_Comm comm;
+  PetscCallVoid(PetscObjectGetComm((PetscObject)mat->mat, &comm));
+
+  MPI_Allreduce(MPI_IN_PLACE, &active, 1, MPI_INTEGER, MPI_SUM, comm);
+  *a = 0 != active;
 }
 
 struct ADData_MatViewReverse : public ReverseDataBase<ADData_MatViewReverse> {

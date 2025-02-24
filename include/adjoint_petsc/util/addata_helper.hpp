@@ -49,6 +49,7 @@ struct AdjointVecData {
   PetscErrorCode getAdjointNoReset(Vec vec_b, VectorInterface* vi, PetscInt dim);
   PetscErrorCode updateAdjoint(Vec vec_b, VectorInterface* vi, PetscInt dim);
 
+  static PetscErrorCode makePassive(ADVec vec);
   static PetscErrorCode registerExternalFunctionOutput(ADVec vec);
 
   static PetscErrorCode extractPrimal(ADVec vec, Real* vec_p);

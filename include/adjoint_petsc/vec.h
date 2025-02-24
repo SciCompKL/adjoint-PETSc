@@ -58,6 +58,8 @@ PetscErrorCode VecView              (ADVec vec, PetscViewer viewer);
 PetscErrorCode VecWAXPY             (ADVec w, Number alpha, ADVec x, ADVec y);
 
 void ADVecCreateADData(ADVec vec);
+void ADVecIsActive    (ADVec vec, bool* a);
+
 void ADVecViewReverse(ADVec vec, std::string m, int id, PetscViewer viewer);
 void ADVecViewReverse(Vec vec, std::string m, int id, PetscViewer viewer);
 
