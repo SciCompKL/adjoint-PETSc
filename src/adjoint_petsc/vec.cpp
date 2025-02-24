@@ -373,6 +373,7 @@ struct ADData_VecDot : public ReverseDataBase<ADData_VecDot> {
         vi->updateAdjoint(y_i[i], d, x_v[i] * adj[d]);
       }
     }
+    vi->resetAdjointVec(0); // Reset id zero, this avoids the check for the updateAdjoint methods.
   }
 };
 
@@ -487,6 +488,7 @@ struct ADData_VecMax : public ReverseDataBase<ADData_VecMax> {
     for(size_t i = 0; i < x_i.size(); i += 1) {
       vi->updateAdjointVec(x_i[i], adj.data());
     }
+    vi->resetAdjointVec(0); // Reset id zero, this avoids the check for the updateAdjoint methods.
   }
 };
 
@@ -580,6 +582,8 @@ struct ADData_VecNorm : public ReverseDataBase<ADData_VecNorm> {
     else {
       // TODO: throw error.
     }
+
+    vi->resetAdjointVec(0); // Reset id zero, this avoids the check for the updateAdjoint methods.
   }
 };
 
@@ -808,6 +812,7 @@ struct ADData_VecSum : public ReverseDataBase<ADData_VecSum> {
     for(size_t i = 0; i < x_i.size(); i += 1) {
       vi->updateAdjointVec(x_i[i], adj.data());
     }
+    vi->resetAdjointVec(0); // Reset id zero, this avoids the check for the updateAdjoint methods.
   }
 };
 

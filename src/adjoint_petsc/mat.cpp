@@ -531,6 +531,8 @@ struct ADData_MatMult : public ReverseDataBase<ADData_MatMult> {
       PetscCallVoid(PetscObjectIterateAllEntries(dyadic_update, A_v, A_i));
     }
 
+    vi->resetAdjointVec(0); // Reset id zero, this avoids the check for the updateAdjoint methods.
+
     PetscCallVoid(x_i.freeAdjoint(&x_b));
     PetscCallVoid(y_i.freeAdjoint(&y_b));
 
@@ -668,6 +670,7 @@ struct ADData_MatNorm : public ReverseDataBase<ADData_MatNorm> {
     else {
       // TODO: Throw error
     }
+    vi->resetAdjointVec(0); // Reset id zero, this avoids the check for the updateAdjoint methods.
   }
 };
 
@@ -811,7 +814,9 @@ void ADMatCopyForReverse(ADMat mat, Mat* newm, ADMatData** newd) {
 
   PetscCallVoid(MatDuplicate(mat->mat, MAT_COPY_VALUES, newm));
 
-  *newd = mat->mat_i->clone();
+  if(nullptr != newd) {
+    *newd = mat->mat_i->clone();
+  }
 }
 
 void ADMatIsActive(ADMat mat, bool* a) {

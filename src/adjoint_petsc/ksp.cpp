@@ -70,11 +70,15 @@ struct ADData_KSPSolve : public ReverseDataBase<ADData_KSPSolve> {
 
   SharedKSP ksp;
 
-  ADData_KSPSolve(ADKSP ksp, ADVec b, ADVec x) : b_i(b), x_v(0), x_i(x), A_v(), A_i(), P_v(), ksp(ksp->ksp) {
+  ADData_KSPSolve(ADKSP ksp, bool active_A, ADVec b, ADVec x) : b_i(b), x_v(0), x_i(x), A_v(), A_i(), P_v(), ksp(ksp->ksp) {
     x_v.resize(x_i.ids.size());
     PetscCallVoid(AdjointVecData::extractPrimal(x, x_v.data()));
 
-    ADMatCopyForReverse(ksp->Amat, &A_v, &A_i);
+    if(active_A) {
+      ADMatCopyForReverse(ksp->Amat, &A_v, &A_i);
+    } else {
+      ADMatCopyForReverse(ksp->Amat, &A_v, nullptr);
+    }
 
     PetscObjectId id_A;
     PetscObjectId id_P;
@@ -90,10 +94,11 @@ struct ADData_KSPSolve : public ReverseDataBase<ADData_KSPSolve> {
 
   ~ADData_KSPSolve() {
     PetscCallVoid(MatDestroy(&A_v));
-    delete A_i;
-  }
 
-  // TODO: Properly delete stuff
+    if(nullptr != A_i) {
+      delete A_i;
+    }
+  }
 
   void reverse(Tape* tape, VectorInterface* vi) {
     PetscInt low;
@@ -111,7 +116,9 @@ struct ADData_KSPSolve : public ReverseDataBase<ADData_KSPSolve> {
     PetscCallVoid(KSPSetOperators(*ksp.get(), A_v, P_v));
 
     DyadicProductHelper dyadic = {};
-    dyadic.init(A_v, b_b);
+    if(A_i != nullptr) {
+      dyadic.init(A_v, b_b);
+    }
 
     int dim = vi->getVectorSize();
 
@@ -132,9 +139,13 @@ struct ADData_KSPSolve : public ReverseDataBase<ADData_KSPSolve> {
       PetscCallVoid(KSPSolveTranspose(*ksp.get(), x_b, b_b));
       b_i.updateAdjoint(b_b, vi, cur_dim);
 
-      dyadic.communicateValues(b_b);
-      PetscCallVoid(PetscObjectIterateAllEntries(dyadic_update, A_v, A_i));
+      if(A_i != nullptr) {
+        dyadic.communicateValues(b_b);
+        PetscCallVoid(PetscObjectIterateAllEntries(dyadic_update, A_v, A_i));
+      }
     }
+
+    vi->resetAdjointVec(0); // Reset id zero, this avoids the check for the updateAdjoint methods.
 
     PetscCallVoid(x_i.freeAdjoint(&x_b));
     PetscCallVoid(b_i.freeAdjoint(&b_b));
@@ -146,9 +157,19 @@ struct ADData_KSPSolve : public ReverseDataBase<ADData_KSPSolve> {
 PetscErrorCode KSPSolve(ADKSP ksp, ADVec b, ADVec x) {
   PetscCall(KSPSolve(ksp->getKSP(), b->vec, x->vec));
 
-  PetscCall(AdjointVecData::registerExternalFunctionOutput(x));
-  ADData_KSPSolve* data = new ADData_KSPSolve(ksp, b, x);
-  data->push();
+  bool active_A;
+  bool active_b;
+  ADMatIsActive(ksp->Amat, &active_A);
+  ADVecIsActive(b, &active_b);
+
+  if(active_b || active_A) {
+
+    PetscCall(AdjointVecData::registerExternalFunctionOutput(x));
+    ADData_KSPSolve* data = new ADData_KSPSolve(ksp, active_A, b, x);
+    data->push();
+  } else {
+    PetscCall(AdjointVecData::makePassive(x));
+  }
 
   return PETSC_SUCCESS;
 }
