@@ -228,7 +228,8 @@ namespace iterator_implementation {
     if(col_low <= col && col < col_high) {
       PetscCall(accessMatSeqAIJ(std::forward<Func>(func), matd, nullptr, row - row_low, col - col_low, values.accessMatD()...));
     } else {
-      PetscCall(accessMatSeqAIJ(std::forward<Func>(func), mato, colmap, row - row_low, col, values.accessMatO()...));
+      auto r = accessMatSeqAIJ(std::forward<Func>(func), mato, colmap, row - row_low, col, values.accessMatO()...);
+      PetscCall(r);
     }
 
     return PETSC_SUCCESS;

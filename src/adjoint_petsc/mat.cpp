@@ -31,50 +31,58 @@ struct CommunicationData {
   std::vector<int> send_displs;
   std::vector<int> recv_displs;
 
+  bool active;
+
   CommunicationData() : comm(MPI_COMM_SELF), request_number_for_rank_send(0), request_number_for_rank_recv(0),
-      total_request_send(0), total_request_recv(0), send_displs(0), recv_displs(0) {}
+      total_request_send(0), total_request_recv(0), send_displs(0), recv_displs(0), active(false) {}
 
   void initialize(Mat mat, std::vector<LhsInData> const& lhs_in_positions) {
     PetscInt const* ownership_ranges;
     PetscObjectGetComm((PetscObject)mat, &comm);
     PetscCallVoid(MatGetOwnershipRanges(mat, &ownership_ranges));
 
-    // Step 1: Get number of requested values per rank
-    int mpi_rank;
-    int mpi_size;
-    MPI_Comm_rank(comm, &mpi_rank);
-    MPI_Comm_size(comm, &mpi_size);
+    int active_count = (int)lhs_in_positions.size();
+    MPI_Allreduce(MPI_IN_PLACE, &active_count, 1, MPI_INTEGER, MPI_SUM, comm);
+    active = 0 != active_count;
 
-    // The vector with the lhs_in positions is sorted by rows.
-    request_number_for_rank_send.resize(mpi_size);
-    int cur_rank = 0;
-    for(LhsInData const& cur : lhs_in_positions) {
-      // Adjust rank
-      while(cur.row >= ownership_ranges[cur_rank + 1]) {
-        cur_rank += 1;
+    if(active) {
+      // Step 1: Get number of requested values per rank
+      int mpi_rank;
+      int mpi_size;
+      MPI_Comm_rank(comm, &mpi_rank);
+      MPI_Comm_size(comm, &mpi_size);
+
+      // The vector with the lhs_in positions is sorted by rows.
+      request_number_for_rank_send.resize(mpi_size);
+      int cur_rank = 0;
+      for(LhsInData const& cur : lhs_in_positions) {
+        // Adjust rank
+        while(cur.row >= ownership_ranges[cur_rank + 1]) {
+          cur_rank += 1;
+        }
+
+        // Add entries
+        request_number_for_rank_send[cur_rank] += 1;
       }
 
-      // Add entries
-      request_number_for_rank_send[cur_rank] += 1;
-    }
+      request_number_for_rank_recv.resize(mpi_size);
+      MPI_Alltoall(request_number_for_rank_send.data(), 1, MPI_INTEGER, request_number_for_rank_recv.data(), 1, MPI_INTEGER, comm);
 
-    request_number_for_rank_recv.resize(mpi_size);
-    MPI_Alltoall(request_number_for_rank_send.data(), 1, MPI_INTEGER, request_number_for_rank_recv.data(), 1, MPI_INTEGER, comm);
-
-    // Step 2: Communicate requesteed values to ranks
-    // step 2.1: Compute the total size and allocate the send/recv displs
-    total_request_send = 0;
-    total_request_recv = 0;
-    send_displs.resize(mpi_size + 1); // One extra for total displacement.
-    recv_displs.resize(mpi_size + 1); // One extra for total displacement.
-    for(int i = 0; i < mpi_size; i += 1) {
-      send_displs[i] = total_request_send;
-      recv_displs[i] = total_request_recv;
-      total_request_send += request_number_for_rank_send[i];
-      total_request_recv += request_number_for_rank_recv[i];
+      // Step 2: Communicate requesteed values to ranks
+      // step 2.1: Compute the total size and allocate the send/recv displs
+      total_request_send = 0;
+      total_request_recv = 0;
+      send_displs.resize(mpi_size + 1); // One extra for total displacement.
+      recv_displs.resize(mpi_size + 1); // One extra for total displacement.
+      for(int i = 0; i < mpi_size; i += 1) {
+        send_displs[i] = total_request_send;
+        recv_displs[i] = total_request_recv;
+        total_request_send += request_number_for_rank_send[i];
+        total_request_recv += request_number_for_rank_recv[i];
+      }
+      send_displs[mpi_size] = total_request_send;
+      recv_displs[mpi_size] = total_request_recv;
     }
-    send_displs[mpi_size] = total_request_send;
-    recv_displs[mpi_size] = total_request_recv;
   }
 
   void commRowCol(LhsInData* send, LhsInData* recv) {
@@ -122,80 +130,89 @@ struct ADData_MatSetValues {
   }
 
   void addEntries(PetscInt m, PetscInt const* idxm, PetscInt n, PetscInt const* idxn, Number const* values) {
-    step_boundaries.push_back((int)rhs_data.size());
-    for (int cur_row = 0; cur_row < m; cur_row += 1) {
-      if(idxm[cur_row] < 0) { continue; }
-
-      for (int cur_col = 0; cur_col < n; cur_col += 1) {
-        if(idxn[cur_col] < 0) { continue; }
-
-        addEntry(idxm[cur_row], idxn[cur_col], values[cur_row * n + cur_col]);
-      }
-    }
-
     if(Number::getTape().isActive()) {
-      Number::getTape().pushExternalFunction(codi::ExternalFunction<Tape>::create(&step_reverse, this, &no_delete));
+      int boundary_start = (int)rhs_data.size();
+
+      for (int cur_row = 0; cur_row < m; cur_row += 1) {
+        if(idxm[cur_row] < 0) { continue; }
+
+        for (int cur_col = 0; cur_col < n; cur_col += 1) {
+          if(idxn[cur_col] < 0) { continue; }
+
+          addEntry(idxm[cur_row], idxn[cur_col], values[cur_row * n + cur_col]);
+        }
+      }
+
+      if(boundary_start != (int)rhs_data.size()) {
+        step_boundaries.push_back(boundary_start);
+
+        Number::getTape().pushExternalFunction(codi::ExternalFunction<Tape>::create(&step_reverse, this, &no_delete));
+      }
     }
   }
 
   void finalize(ADMat mat) {
+    // TODO: Add collection of values that have been set by passive rhs and disable them here.
+    Tape& tape = Number::getTape();
+
     step_boundaries.push_back((int)rhs_data.size());
 
     finalizeData(); // Sort the lhs_in_positions for better access
 
     comm_data.initialize(mat->mat, lhs_in_positions);
 
-    std::vector<LhsInData> row_col_data(comm_data.total_request_recv);
-    comm_data.commRowCol(lhs_in_positions.data(), row_col_data.data());
+    if(comm_data.active && tape.isActive()) {
+      std::vector<LhsInData> row_col_data(comm_data.total_request_recv);
+      comm_data.commRowCol(lhs_in_positions.data(), row_col_data.data());
 
-    std::vector<LhsInData> row_col_data_unique(row_col_data);
-    lhs_out_positions.resize(comm_data.total_request_recv);
+      std::vector<LhsInData> row_col_data_unique(row_col_data);
+      lhs_out_positions.resize(comm_data.total_request_recv);
 
-    std::sort(row_col_data_unique.begin(), row_col_data_unique.end());
-    auto unique_end = std::unique(row_col_data_unique.begin(), row_col_data_unique.end());
-    row_col_data_unique.erase(unique_end, row_col_data_unique.end());
+      std::sort(row_col_data_unique.begin(), row_col_data_unique.end());
+      auto unique_end = std::unique(row_col_data_unique.begin(), row_col_data_unique.end());
+      row_col_data_unique.erase(unique_end, row_col_data_unique.end());
 
-    int lhs_out_pos = 0;
-    int cur_rank = 0;
-    for(int i = 0; i < comm_data.total_request_recv; i += 1) {
-      LhsInData const& cur = row_col_data[i];
+      int lhs_out_pos = 0;
+      int cur_rank = 0;
+      for(int i = 0; i < comm_data.total_request_recv; i += 1) {
+        LhsInData const& cur = row_col_data[i];
 
-      // Reset lhs_out_pos on rank shift
-      while(i >= comm_data.recv_displs[cur_rank + 1]) {
-        cur_rank += 1;
-        lhs_out_pos = 0;
+        // Reset lhs_out_pos on rank shift
+        while(i >= comm_data.recv_displs[cur_rank + 1]) {
+          cur_rank += 1;
+          lhs_out_pos = 0;
+        }
+
+        // Now search in the lhs_out values
+        for(; lhs_out_pos < (int)row_col_data_unique.size(); lhs_out_pos += 1) {
+          LhsInData const& cur_unique = row_col_data_unique[lhs_out_pos];
+          if(cur.row == cur_unique.row && cur.col == cur_unique.col) {
+            lhs_out_positions[i] = lhs_out_pos;
+            break;
+          }
+        }
       }
 
-      // Now search in the lhs_out values
-      for(; lhs_out_pos < (int)row_col_data_unique.size(); lhs_out_pos += 1) {
-        LhsInData const& cur_unique = row_col_data_unique[lhs_out_pos];
-        if(cur.row == cur_unique.row && cur.col == cur_unique.col) {
-          lhs_out_positions[i] = lhs_out_pos;
-          break;
-        }
+      // Register all modified values
+      lhs_identifiers.resize(row_col_data_unique.size());
+      int pos = 0;
+      for(LhsInData const& cur : row_col_data_unique) {
+        auto func = [&](Wrapper& value) {
+
+          if(tape.isActive()) {
+            tape.registerExternalFunctionOutput(value);
+            lhs_identifiers[pos] = value.getIdentifier();
+          } else {
+            tape.deactivateValue(value);
+          }
+        };
+        PetscCallVoid(ADMatAccessValue(func, cur.row, cur.col, mat));
+
+        pos += 1;
       }
     }
 
-    // Register all modified values
-    lhs_identifiers.resize(row_col_data_unique.size());
-    Tape& tape = Number::getTape();
-    int pos = 0;
-    for(LhsInData const& cur : row_col_data_unique) {
-      auto func = [&](Wrapper& value) {
-
-        if(tape.isActive()) {
-          tape.registerExternalFunctionOutput(value);
-          lhs_identifiers[pos] = value.getIdentifier();
-        } else {
-          tape.deactivateValue(value);
-        }
-      };
-      PetscCallVoid(ADMatAccessValue(func, cur.row, cur.col, mat));
-
-      pos += 1;
-    }
-
-    if(tape.isActive()) {
+    if(comm_data.active && tape.isActive()) {
       Number::getTape().pushExternalFunction(codi::ExternalFunction<Tape>::create(&assemble_reverse, this, &ad_delete));
     } else {
       delete this;
@@ -272,9 +289,11 @@ struct ADData_MatSetValues {
 
   private:
   void addEntry(PetscInt row, PetscInt col, Number const& rhs_value) {
-    PetscInt lhs_cache_pos = insertLhsPos(row, col);
+    if(Number::getTape().isIdentifierActive(rhs_value.getIdentifier())) {
+      PetscInt lhs_cache_pos = insertLhsPos(row, col);
 
-    rhs_data.push_back({lhs_cache_pos, rhs_value.getIdentifier()});
+      rhs_data.push_back({lhs_cache_pos, rhs_value.getIdentifier()});
+    }
   }
 
   PetscInt insertLhsPos(PetscInt row, PetscInt col) {
@@ -707,7 +726,7 @@ struct MatrixEntry {
 };
 
 bool operator<(MatrixEntry const& a, MatrixEntry const& b) {
-    return a.row < b.row || (a.row == b.row && a.col < b.col);
+  return a.row < b.row || (a.row == b.row && a.col < b.col);
 }
 
 PetscErrorCode MatView(ADMat mat, PetscViewer viewer) {

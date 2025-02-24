@@ -91,20 +91,27 @@ struct ADData_SetValues {
   }
 
   void addEntries(PetscInt ssize, PetscInt const* list, Number const* values) {
-    step_boundaries.push_back((int)rhs_data.size());
-    for (int i = 0; i < ssize; i += 1) {
-      if(list[i] < 0) {
-        continue;
-      }
-      addEntry(list[i], values[i]);
-    }
-
     if(Number::getTape().isActive()) {
-      Number::getTape().pushExternalFunction(codi::ExternalFunction<Tape>::create(&step_reverse, this, &no_delete));
+      int boundary_start = (int)rhs_data.size();
+      for (int i = 0; i < ssize; i += 1) {
+        if(list[i] < 0) {
+          continue;
+        }
+        addEntry(list[i], values[i]);
+      }
+
+      if(boundary_start != (int)rhs_data.size()) {
+        step_boundaries.push_back(boundary_start);
+
+        Number::getTape().pushExternalFunction(codi::ExternalFunction<Tape>::create(&step_reverse, this, &no_delete));
+      }
     }
   }
 
   void finalize(ADVec vec) {
+    // TODO: Add collection of values that have been set by passive rhs and disable them here.
+    Tape& tape = Number::getTape();
+
     step_boundaries.push_back((int)rhs_data.size());
 
     // Compute the activity for this operation.
@@ -117,35 +124,41 @@ struct ADData_SetValues {
     VecAssemblyBegin(activity_vector);
     VecAssemblyEnd(activity_vector);
 
-    int local_size;
-    VecGetLocalSize(activity_vector, &local_size);
+    Real active_sum;
+    VecSum(activity_vector, &active_sum);
+    bool active = tape.isActive() && 0.0 != active_sum;
 
-    Real* activity_vector_data;
-    Real* vec_data;
-    VecGetArray(activity_vector, &activity_vector_data);
-    VecGetArray(vec->vec, &vec_data);
+    if(active) {
+      int local_size;
+      VecGetLocalSize(activity_vector, &local_size);
 
-    Tape& tape = Number::getTape();
-    for(int i = 0; i < local_size; i += 1) {
-      if(0 != activity_vector_data[i]) {
+      Real* activity_vector_data;
+      Real* vec_data;
+      VecGetArray(activity_vector, &activity_vector_data);
+      VecGetArray(vec->vec, &vec_data);
 
-        Wrapper temp = createRefType(vec_data[i], vec->ad_data[i]);
-        if(tape.isActive()) {
 
-          tape.registerExternalFunctionOutput(temp);
+      for(int i = 0; i < local_size; i += 1) {
+        if(0 != activity_vector_data[i]) {
 
-          lhs_out_positions.push_back(i);
-          lhs_identifiers.push_back(vec->ad_data[i]);
-        } else {
-          tape.deactivateValue(temp);
+          Wrapper temp = createRefType(vec_data[i], vec->ad_data[i]);
+          if(tape.isActive()) {
+
+            tape.registerExternalFunctionOutput(temp);
+
+            lhs_out_positions.push_back(i);
+            lhs_identifiers.push_back(vec->ad_data[i]);
+          } else {
+            tape.deactivateValue(temp);
+          }
         }
       }
+
+      VecRestoreArray(activity_vector, &activity_vector_data);
+      VecRestoreArray(vec->vec, &vec_data);
     }
 
-    VecRestoreArray(activity_vector, &activity_vector_data);
-    VecRestoreArray(vec->vec, &vec_data);
-
-    if(tape.isActive()) {
+    if(active) {
       Number::getTape().pushExternalFunction(codi::ExternalFunction<Tape>::create(&assemble_reverse, this, &ad_delete));
     } else {
       delete this;
@@ -224,9 +237,11 @@ struct ADData_SetValues {
 
   private:
   void addEntry(PetscInt lhs_pos, Number const& rhs_value) {
-    PetscInt lhs_cache_pos = insertLhsPos(lhs_pos);
+    if(Number::getTape().isIdentifierActive(rhs_value.getIdentifier())) {
+      PetscInt lhs_cache_pos = insertLhsPos(lhs_pos);
 
-    rhs_data.push_back({lhs_cache_pos, rhs_value.getIdentifier()});
+      rhs_data.push_back({lhs_cache_pos, rhs_value.getIdentifier()});
+    }
   }
 
   PetscInt insertLhsPos(PetscInt lhs_pos) {
