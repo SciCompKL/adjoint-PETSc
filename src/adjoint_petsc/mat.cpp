@@ -236,8 +236,10 @@ struct ADData_MatSetValues {
     }
 
     // Step 4: Clean adjoints
-    for(Identifier const& cur : lhs_identifiers) {
-      va->resetAdjointVec(cur);
+    if(INSERT_VALUES == mode) {
+      for(Identifier const& cur : lhs_identifiers) {
+        va->resetAdjointVec(cur);
+      }
     }
 
     // Step 5: Send requested adjoint values to ranks

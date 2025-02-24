@@ -185,7 +185,9 @@ struct ADData_SetValues {
 
     for(int i = 0; i < (int)data->lhs_identifiers.size(); i += 1) {
       va->getAdjointVec(data->lhs_identifiers[i], &local_data[data->lhs_out_positions[i] * ad_vec_size]);
-      va->resetAdjointVec(data->lhs_identifiers[i]);
+      if(INSERT_VALUES == data->mode) {
+        va->resetAdjointVec(data->lhs_identifiers[i]);
+      }
     }
 
     VecRestoreArray(adjoint_vec, &local_data);
