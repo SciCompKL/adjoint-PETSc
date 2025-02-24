@@ -718,6 +718,10 @@ PetscErrorCode VecSetValues(ADVec vec, PetscInt ni, PetscInt const* ix, Number c
     data = (ADData_SetValues*)vec->transaction_data;
   }
 
+  if(data->mode != iora) {
+    std::cerr << "Different insert mode" << std::endl;
+  }
+
   data->addEntries(ni, ix, y);
 
   return r;
@@ -781,8 +785,14 @@ PetscErrorCode VecView(ADVec vec, PetscViewer viewer) {
   // TODO: Maybe add special AD output options.
   auto func = [&](PetscInt row, Wrapper& value) {
     (void)row;
+    //std::cout << value.getValue() << "\n";
     std::cout << value.getIdentifier() << " " << value.getValue() << "\n";
   };
+  std::cout.setf(std::ios::scientific);
+  std::cout.setf(std::ios::showpos);
+  std::cout.precision(12);
+  std::cout << "Vector of global size M=" << vec->ad_size << std::endl; // TODO:
+  std::cout << "cpu +0 #rows: " << vec->ad_size << std::endl; // TODO:
   VecIterateAllEntries(func, vec);
   std::cout.flush();
 
@@ -849,11 +859,18 @@ struct ADData_ViewReverse : public ReverseDataBase<ADData_ViewReverse> {
     int dim = vi->getVectorSize();
 
     auto func = [&](PetscInt row, Real& value) {
+      //std::cout << value << "\n";
       std::cout << vec_i.ids[row - low] << " " << value << "\n";
     };
+    std::cout.setf(std::ios::scientific);
+    std::cout.setf(std::ios::showpos);
+    std::cout.precision(12);
     std::cout << m << " reverse id: " << id << std::endl;
+
+    std::cout << "Vector of global size M=" << vec_i.ids.size() << std::endl; // TODO:
+    std::cout << "cpu +0 #rows: " << vec_i.ids.size() << std::endl; // TODO:
     for(int cur_dim = 0; cur_dim < dim; cur_dim += 1) {
-      vec_i.getAdjoint(vec_b, vi, cur_dim);
+      vec_i.getAdjointNoReset(vec_b, vi, cur_dim);
       VecIterateAllEntries(func, vec_b);
       std::cout.flush();
     }

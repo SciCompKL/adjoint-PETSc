@@ -698,11 +698,17 @@ struct MatrixEntry {
   PetscInt row;
   PetscInt col;
   Real value;
+  Identifier id;
 
   void print() {
-    std::cout << row << " " << col << " " << " " << value << "\n";
+    //std::cout << row << " " << col << " " << value << "\n";
+    std::cout << row << " " << col << " " << id << " " << value << "\n";
   }
 };
+
+bool operator<(MatrixEntry const& a, MatrixEntry const& b) {
+    return a.row < b.row || (a.row == b.row && a.col < b.col);
+}
 
 PetscErrorCode MatView(ADMat mat, PetscViewer viewer) {
   std::vector<MatrixEntry> data = {};
@@ -711,7 +717,7 @@ PetscErrorCode MatView(ADMat mat, PetscViewer viewer) {
   std::cout.setf(std::ios::showpos);
   std::cout.precision(12);
   auto func = [&](PetscInt row, PetscInt col, Wrapper& value) {
-    data.push_back(MatrixEntry({row, col, value.value()}));
+    data.push_back(MatrixEntry({row, col, value.value(), value.getIdentifier()}));
   };
   PetscInt M, N;
   PetscCall(MatGetSize(mat, &M, &N));
@@ -802,9 +808,12 @@ struct ADData_MatViewReverse : public ReverseDataBase<ADData_MatViewReverse> {
 
     int cur_dim = 0;
     auto func = [&](PetscInt row, PetscInt col, Real& value, Identifier& id) {
-      data.push_back(MatrixEntry({row, col, vi->getAdjoint(id, cur_dim)}));
+      data.push_back(MatrixEntry({row, col, vi->getAdjoint(id, cur_dim), id}));
     };
     std::cout << m << " reverse id: m" << id << std::endl;
+    PetscInt M, N;
+    PetscCallVoid(MatGetSize(mat_v, &M, &N));
+    std::cout << "Matrix of size " << M << "x" << N << std::endl;
     for(; cur_dim < dim; cur_dim += 1) {
       PetscObjectIterateAllEntries(func, mat_v, mat_i);
 
