@@ -379,9 +379,18 @@ struct ADData_VecDot : public ReverseDataBase<ADData_VecDot> {
 PetscErrorCode VecDot(ADVec x, ADVec y, Number* val) {
   PetscCall(VecDot(x->vec, y->vec, &val->value()));
 
-  Number::getTape().registerExternalFunctionOutput(*val);
-  ADData_VecDot* data = new ADData_VecDot(x, y, val);
-  data->push();
+  bool active_x;
+  bool active_y;
+  ADVecIsActive(x, &active_x);
+  ADVecIsActive(x, &active_y);
+
+  if(active_x || active_y) {
+    Number::getTape().registerExternalFunctionOutput(*val);
+    ADData_VecDot* data = new ADData_VecDot(x, y, val);
+    data->push();
+  } else {
+    Number::getTape().deactivateValue(*val);
+  }
 
   return PETSC_SUCCESS;
 }
@@ -484,9 +493,16 @@ struct ADData_VecMax : public ReverseDataBase<ADData_VecMax> {
 PetscErrorCode VecMax(ADVec x, PetscInt* p, Number* val) {
   PetscCall(VecMax(x->vec, p, &val->value()));
 
-  Number::getTape().registerExternalFunctionOutput(*val);
-  ADData_VecMax* data = new ADData_VecMax(x, p, val);
-  data->push();
+  bool active_x;
+  ADVecIsActive(x, &active_x);
+
+  if(active_x) {
+    Number::getTape().registerExternalFunctionOutput(*val);
+    ADData_VecMax* data = new ADData_VecMax(x, p, val);
+    data->push();
+  } else {
+    Number::getTape().deactivateValue(*val);
+  }
 
   return PETSC_SUCCESS;
 }
@@ -572,14 +588,23 @@ PetscErrorCode VecNorm(ADVec x, NormType type, Number* val) {
 
   PetscCall(VecNorm(x->vec, type, val_p.data()));
 
+  bool active_x;
+  ADVecIsActive(x, &active_x);
+
   int size = (type == NORM_1_AND_2) ? 2 : 1;
   for(int i = 0; i < size; i += 1) {
     val[i].setValue(val_p[i]);
-    Number::getTape().registerExternalFunctionOutput(val[i]);
+    if(active_x) {
+      Number::getTape().registerExternalFunctionOutput(val[i]);
+    } else {
+      Number::getTape().deactivateValue(val[i]);
+    }
   }
 
-  ADData_VecNorm* data = new ADData_VecNorm(x, type, val);
-  data->push();
+  if(active_x) {
+    ADData_VecNorm* data = new ADData_VecNorm(x, type, val);
+    data->push();
+  }
 
   return PETSC_SUCCESS;
 }
@@ -789,9 +814,16 @@ struct ADData_VecSum : public ReverseDataBase<ADData_VecSum> {
 PetscErrorCode VecSum(ADVec x, Number* sum) {
   PetscCall(VecSum(x->vec, &sum->value()));
 
-  Number::getTape().registerExternalFunctionOutput(*sum);
-  ADData_VecSum* data = new ADData_VecSum(x, sum);
-  data->push();
+  bool active_x;
+  ADVecIsActive(x, &active_x);
+
+  if(active_x) {
+    Number::getTape().registerExternalFunctionOutput(*sum);
+    ADData_VecSum* data = new ADData_VecSum(x, sum);
+    data->push();
+  } else {
+    Number::getTape().deactivateValue(*sum);
+  }
 
   return PETSC_SUCCESS;
 }
