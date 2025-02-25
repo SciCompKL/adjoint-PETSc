@@ -60,7 +60,7 @@ PetscErrorCode VecWAXPY             (ADVec w, Number alpha, ADVec x, ADVec y);
 void ADVecCreateADData(ADVec vec);
 void ADVecIsActive    (ADVec vec, bool* a);
 
-void ADVecViewReverse(ADVec vec, std::string m, int id, PetscViewer viewer);
-void ADVecViewReverse(Vec vec, std::string m, int id, PetscViewer viewer);
+void ADVecDebugOutput(ADVec vec, std::string m, int id);
+void ADVecDebugOutput(Vec vec, std::string m, int id);
 
 AP_NAMESPACE_END

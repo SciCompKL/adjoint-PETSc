@@ -1,3 +1,4 @@
+#include <adjoint_petsc/options.h>
 #include <adjoint_petsc/vec.h>
 #include <adjoint_petsc/util/petsc_missing.h>
 #include <adjoint_petsc/util/addata_helper.hpp>
@@ -724,21 +725,7 @@ PetscErrorCode VecSum(ADVec x, Number* sum) {
 }
 
 PetscErrorCode VecView(ADVec vec, PetscViewer viewer) {
-  // TODO: Maybe add special AD output options.
-  auto func = [&](PetscInt row, Wrapper& value) {
-    (void)row;
-    //std::cout << value.getValue() << "\n";
-    std::cout << value.getIdentifier() << " " << value.getValue() << "\n";
-  };
-  std::cout.setf(std::ios::scientific);
-  std::cout.setf(std::ios::showpos);
-  std::cout.precision(12);
-  std::cout << "Vector of global size M=" << vec->ad_size << std::endl; // TODO:
-  std::cout << "cpu +0 #rows: " << vec->ad_size << std::endl; // TODO:
-  VecIterateAllEntries(func, vec);
-  std::cout.flush();
-
-  return PETSC_SUCCESS;
+  return VecView(vec->vec, viewer);
 }
 
 PetscErrorCode VecWAXPY(ADVec w, Number alpha, ADVec x, ADVec y) {
@@ -784,55 +771,92 @@ void ADVecIsActive(ADVec vec, bool* a) {
   *a = 0 != active;
 }
 
-struct ADData_ViewReverse : public ReverseDataBase<ADData_ViewReverse> {
+PetscErrorCode ADVecDebugOutputImpl(Vec vec_v, Identifier* vec_i, std::string m, int id, bool forward, VectorInterface* vi, AdjointVecData* vec_data) {
+  std::ostream& out = ADPetscOptionsGetDebugOutputStream();
+  out.setf(std::ios::scientific);
+  out.setf(std::ios::showpos);
+  out.precision(ADPetscOptionsGetDebugOutputPrecission());
+
+  PetscInt M;
+  MPI_Comm comm;
+  int rank;
+  int size;
+  PetscCall(VecGetSize(vec_v, &M));
+  PetscCall(PetscObjectGetComm((PetscObject)vec_v, &comm));
+  MPI_Comm_rank(comm, &rank);
+  MPI_Comm_size(comm, &size);
+
+  int vec_size = 1; // Primal has a vector size of one.
+  if(!forward) {
+    vec_size = vi->getVectorSize();
+  }
+
+  if(rank == 0) {
+    if(forward) {
+      out << m << " forward vector id: " << id << std::endl;
+    } else {
+      out << m << " reverse vector id: " << id << std::endl;
+    }
+    out << "Vector of global size M=" << M << std::endl;
+  }
+  MPI_Barrier(comm);
+  for(int cur_dim = 0; cur_dim < vec_size; cur_dim += 1) {
+    for(int cur_rank = 0; cur_rank < size; cur_rank += 1) {
+      if(cur_rank == rank) {
+        if(forward) {
+          out << "Rank: " << cur_rank << "\n";
+        } else {
+          out << "Rank: " << cur_rank << " dim: " << cur_dim <<"\n";
+          vec_data->getAdjointNoReset(vec_v, vi, cur_dim);
+        }
+        auto func = [&](PetscInt row, Real& value, Identifier& id) {
+          (void)row;
+          out << value;
+          if(ADPetscOptionsGetDebugOutputIdentifiers()) {
+            out << "(" << id << ")";
+          }
+          out << "\n";
+        };
+        VecIterateAllEntries(func, vec_v, vec_i);
+        out.flush();
+      }
+      MPI_Barrier(comm);
+    }
+  }
+
+  return PETSC_SUCCESS;
+}
+
+struct ADData_VecDebugOutput : public ReverseDataBase<ADData_VecDebugOutput> {
 
   AdjointVecData vec_i;
   std::string m;
   int id;
-  PetscViewer viewer;
 
-  ADData_ViewReverse(ADVec vec, std::string m, int id, PetscViewer viewer) : vec_i(vec), m(m), id(id), viewer(viewer) {}
+  ADData_VecDebugOutput(ADVec vec, std::string m, int id) : vec_i(vec), m(m), id(id) {}
 
 
   void reverse(Tape* tape, VectorInterface* vi) {
     Vec vec_b;
     PetscCallVoid(vec_i.createAdjoint(&vec_b, 1));
-
-    PetscInt low;
-    PetscCallVoid(VecGetOwnershipRange(vec_b, &low, nullptr));
-
-    int dim = vi->getVectorSize();
-
-    auto func = [&](PetscInt row, Real& value) {
-      //std::cout << value << "\n";
-      std::cout << vec_i.ids[row - low] << " " << value << "\n";
-    };
-    std::cout.setf(std::ios::scientific);
-    std::cout.setf(std::ios::showpos);
-    std::cout.precision(12);
-    std::cout << m << " reverse id: " << id << std::endl;
-
-    std::cout << "Vector of global size M=" << vec_i.ids.size() << std::endl; // TODO:
-    std::cout << "cpu +0 #rows: " << vec_i.ids.size() << std::endl; // TODO:
-    for(int cur_dim = 0; cur_dim < dim; cur_dim += 1) {
-      vec_i.getAdjointNoReset(vec_b, vi, cur_dim);
-      VecIterateAllEntries(func, vec_b);
-      std::cout.flush();
-    }
-
+    PetscCallVoid(ADVecDebugOutputImpl(vec_b, vec_i.ids.data(), m, id, false, vi, &vec_i));
     PetscCallVoid(vec_i.freeAdjoint(&vec_b));
   }
 };
 
-void ADVecViewReverse(ADVec vec, std::string m, int id, PetscViewer viewer) {
-  ADData_ViewReverse* data = new ADData_ViewReverse(vec, m, id, viewer);
-  data->push();
+void ADVecDebugOutput(ADVec vec, std::string m, int id) {
+  if(ADPetscOptionsGetDebugOutputPrimal()) {
+    ADVecDebugOutputImpl(vec->vec, vec->ad_data, m, id, true, nullptr, nullptr);
+  }
+  if(ADPetscOptionsGetDebugOutputReverse()) {
+    ADData_VecDebugOutput* data = new ADData_VecDebugOutput(vec, m, id);
+    data->push();
+  }
 }
-void ADVecViewReverse(Vec vec, std::string m, int id, PetscViewer viewer) {
+void ADVecDebugOutput(Vec vec, std::string m, int id) {
   (void)vec;
   (void)m;
   (void)id;
-  (void)viewer;
 }
 
 AP_NAMESPACE_END

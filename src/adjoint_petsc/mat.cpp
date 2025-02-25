@@ -1,4 +1,5 @@
 #include <adjoint_petsc/mat.h>
+#include <adjoint_petsc/options.h>
 #include <adjoint_petsc/util/addata_helper.hpp>
 #include <adjoint_petsc/util/petsc_missing.h>
 
@@ -719,45 +720,8 @@ PetscErrorCode MatSetValue(ADMat mat, PetscInt i, PetscInt j, Number v, InsertMo
   return MatSetValues(mat, 1, &i, 1, &j, &v, addv);
 }
 
-struct MatrixEntry {
-  PetscInt row;
-  PetscInt col;
-  Real value;
-  Identifier id;
-
-  void print() {
-    //std::cout << row << " " << col << " " << value << "\n";
-    std::cout << row << " " << col << " " << id << " " << value << "\n";
-  }
-};
-
-bool operator<(MatrixEntry const& a, MatrixEntry const& b) {
-  return a.row < b.row || (a.row == b.row && a.col < b.col);
-}
-
 PetscErrorCode MatView(ADMat mat, PetscViewer viewer) {
-  std::vector<MatrixEntry> data = {};
-
-  std::cout.setf(std::ios::scientific);
-  std::cout.setf(std::ios::showpos);
-  std::cout.precision(12);
-  auto func = [&](PetscInt row, PetscInt col, Wrapper& value) {
-    data.push_back(MatrixEntry({row, col, value.value(), value.getIdentifier()}));
-  };
-  PetscInt M, N;
-  PetscCall(MatGetSize(mat, &M, &N));
-  std::cout << "Matrix of size " << M << "x" << N << std::endl;
-  PetscObjectIterateAllEntries(func, mat);
-
-  std::sort(data.begin(), data.end());
-  for(MatrixEntry& cur : data) {
-    cur.print();
-  }
-  std::cout.flush();
-
-  return PETSC_SUCCESS;
-
-  //return MatView(mat->mat, viewer);
+  return MatView(mat->mat, viewer);
 }
 
 PetscErrorCode MatZeroEntries(ADMat mat) {
@@ -828,58 +792,121 @@ void ADMatIsActive(ADMat mat, bool* a) {
   *a = 0 != active;
 }
 
-struct ADData_MatViewReverse : public ReverseDataBase<ADData_MatViewReverse> {
+struct MatrixEntry {
+  PetscInt row;
+  PetscInt col;
+  Real value;
+  Identifier id;
+
+  void print(std::ostream& out) {
+    if(ADPetscOptionsGetDebugOutputIdentifiers()) {
+      out << row << " " << col << " " << value << "(" << id << ")\n";
+    } else {
+      out << row << " " << col << " " << value << "\n";
+    }
+  }
+};
+
+bool operator<(MatrixEntry const& a, MatrixEntry const& b) {
+  return a.row < b.row || (a.row == b.row && a.col < b.col);
+}
+
+PetscErrorCode ADMatDebugOutputImpl(Mat mat_v, ADMatData* mat_i, std::string m, int id, bool forward, VectorInterface* vi) {
+  std::ostream& out = ADPetscOptionsGetDebugOutputStream();
+  out.setf(std::ios::scientific);
+  out.setf(std::ios::showpos);
+  out.precision(ADPetscOptionsGetDebugOutputPrecission());
+
+  PetscInt M, N;
+  MPI_Comm comm;
+  int rank;
+  int size;
+  PetscCall(MatGetSize(mat_v, &M, &N));
+  PetscCall(PetscObjectGetComm((PetscObject)mat_v, &comm));
+  MPI_Comm_rank(comm, &rank);
+  MPI_Comm_size(comm, &size);
+
+  int vec_size = 1; // Primal has a vector size of one.
+  if(!forward) {
+    vec_size = vi->getVectorSize();
+  }
+
+  if(rank == 0) {
+    if(forward) {
+      out << m << " forward matrix id: " << id << std::endl;
+    } else {
+      out << m << " reverse matrix id: " << id << std::endl;
+    }
+    out << "Matrix of global size " << M << "x" << N << std::endl;
+  }
+  MPI_Barrier(comm);
+  for(int cur_dim = 0; cur_dim < vec_size; cur_dim += 1) {
+    for(int cur_rank = 0; cur_rank < size; cur_rank += 1) {
+      if(cur_rank == rank) {
+        std::vector<MatrixEntry> data = {};
+        if(forward) {
+          out << "Rank: " << cur_rank << "\n";
+          auto func = [&](PetscInt row, PetscInt col, Real& value, Identifier& id) {
+            data.push_back(MatrixEntry({row, col, value, id}));
+          };
+
+          PetscObjectIterateAllEntries(func, mat_v, mat_i);
+        } else {
+          out << "Rank: " << cur_rank << " dim: " << cur_dim <<"\n";
+          auto func = [&](PetscInt row, PetscInt col, Real& value, Identifier& id) {
+            data.push_back(MatrixEntry({row, col, vi->getAdjoint(id, cur_dim), id}));
+          };
+
+          PetscObjectIterateAllEntries(func, mat_v, mat_i);
+        }
+
+        std::sort(data.begin(), data.end());
+        for(MatrixEntry& cur : data) {
+          cur.print(out);
+        }
+        out.flush();
+      }
+      MPI_Barrier(comm);
+    }
+  }
+
+  return PETSC_SUCCESS;
+}
+
+struct ADData_MatDebugOutput : public ReverseDataBase<ADData_MatDebugOutput> {
 
   Mat mat_v;
   ADMatData* mat_i;
   std::string m;
   int id;
-  PetscViewer viewer;
 
-  ADData_MatViewReverse(ADMat mat, std::string m, int id, PetscViewer viewer) : mat_v(), mat_i(), m(m), id(id), viewer(viewer) {
+  ADData_MatDebugOutput(ADMat mat, std::string m, int id) : mat_v(), mat_i(), m(m), id(id) {
     ADMatCopyForReverse(mat, &mat_v, &mat_i);
   }
 
+  ~ADData_MatDebugOutput() {
+    MatDestroy(&mat_v);
+    delete mat_i;
+  }
+
   void reverse(Tape* tape, VectorInterface* vi) {
-
-    int dim = vi->getVectorSize();
-
-    std::vector<MatrixEntry> data = {};
-    std::cout.setf(std::ios::scientific);
-    std::cout.setf(std::ios::showpos);
-    std::cout.precision(12);
-
-    int cur_dim = 0;
-    auto func = [&](PetscInt row, PetscInt col, Real& value, Identifier& id) {
-      data.push_back(MatrixEntry({row, col, vi->getAdjoint(id, cur_dim), id}));
-    };
-    std::cout << m << " reverse id: m" << id << std::endl;
-    PetscInt M, N;
-    PetscCallVoid(MatGetSize(mat_v, &M, &N));
-    std::cout << "Matrix of size " << M << "x" << N << std::endl;
-    for(; cur_dim < dim; cur_dim += 1) {
-      PetscObjectIterateAllEntries(func, mat_v, mat_i);
-
-      std::sort(data.begin(), data.end());
-      for(MatrixEntry& cur : data) {
-        cur.print();
-      }
-
-      data.clear();
-      std::cout.flush();
-    }
+    ADMatDebugOutputImpl(mat_v, mat_i, m, id, false, vi);
   }
 };
 
-void ADMatViewReverse(ADMat mat, std::string m, int id, PetscViewer viewer) {
-  ADData_MatViewReverse* data = new ADData_MatViewReverse(mat, m, id, viewer);
-  data->push();
+void ADMatDebugOutput(ADMat mat, std::string m, int id) {
+  if(ADPetscOptionsGetDebugOutputPrimal()) {
+    ADMatDebugOutputImpl(mat->mat, mat->mat_i, m, id, true, nullptr);
+  }
+  if(ADPetscOptionsGetDebugOutputReverse()) {
+    ADData_MatDebugOutput* data = new ADData_MatDebugOutput(mat, m, id);
+    data->push();
+  }
 }
-void ADMatViewReverse(Mat mat, std::string m, int id, PetscViewer viewer) {
+void ADMatDebugOutput(Mat mat, std::string m, int id) {
   (void)mat;
   (void)m;
   (void)id;
-  (void)viewer;
 }
 
 AP_NAMESPACE_END

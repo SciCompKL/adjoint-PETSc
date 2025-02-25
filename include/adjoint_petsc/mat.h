@@ -61,7 +61,7 @@ void ADMatCreateADData  (ADMat mat);
 void ADMatCopyForReverse(ADMat mat, Mat* newm, ADMatData** newd);
 void ADMatIsActive      (ADMat mat, bool* a);
 
-void ADMatViewReverse(ADMat mat, std::string m, int id, PetscViewer viewer);
-void ADMatViewReverse(Mat mat, std::string m, int id, PetscViewer viewer);
+void ADMatDebugOutput(ADMat mat, std::string m, int id);
+void ADMatDebugOutput(Mat mat, std::string m, int id);
 
 AP_NAMESPACE_END

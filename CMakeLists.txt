@@ -18,6 +18,7 @@ find_package(CoDiPack CONFIG REQUIRED)
 add_library(adjoint_petsc
   src/adjoint_petsc/ksp.cpp
   src/adjoint_petsc/mat.cpp
+  src/adjoint_petsc/options.cpp
   src/adjoint_petsc/util/addata_helper.cpp
   src/adjoint_petsc/util/petsc_missing.cpp
   src/adjoint_petsc/vec.cpp
@@ -32,6 +33,7 @@ target_sources(adjoint_petsc
     FILES
       include/adjoint_petsc/ksp.h
       include/adjoint_petsc/mat.h
+      include/adjoint_petsc/options.h
       include/adjoint_petsc/vec.h
       include/adjoint_petsc/util/base.hpp
       include/adjoint_petsc/util/codi_def.hpp
