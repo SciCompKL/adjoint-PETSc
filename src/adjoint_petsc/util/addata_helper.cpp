@@ -39,24 +39,19 @@ PetscErrorCode AdjointVecData::getAdjoint(Vec vec_b, VectorInterface* vi, PetscI
 }
 
 PetscErrorCode AdjointVecData::getAdjointNoReset(Vec vec_b, VectorInterface* vi, PetscInt dim) {
-  Real* adjoint;
-  PetscCall(VecGetArray(vec_b, &adjoint));
-  for(size_t i = 0; i < ids.size(); i += 1) {
-    adjoint[i] = vi->getAdjoint(ids[i], dim);
-  }
-  PetscCall(VecRestoreArray(vec_b, &adjoint));
+  auto func = [&](PetscInt row, Real& value, Identifier id) {
+    value = vi->getAdjoint(id, dim);
+  };
+  PetscCall(VecIterateAllEntries(func, vec_b, ids.data()));
 
   return PETSC_SUCCESS;
 }
 
 PetscErrorCode AdjointVecData::updateAdjoint(Vec vec_b, VectorInterface* vi, PetscInt dim) {
-  Real* adjoint;
-  PetscCall(VecGetArray(vec_b, &adjoint));
-  for(size_t i = 0; i < ids.size(); i += 1) {
-    vi->updateAdjoint(ids[i], dim, adjoint[i]);
-  }
-
-  PetscCall(VecRestoreArray(vec_b, &adjoint));
+  auto func = [&](PetscInt row, Real& value, Identifier id) {
+    vi->updateAdjoint(id, dim, value);
+  };
+  PetscCall(VecIterateAllEntries(func, vec_b, ids.data()));
 
   return PETSC_SUCCESS;
 }
@@ -74,15 +69,11 @@ PetscErrorCode AdjointVecData::makePassive(ADVec vec) {
 
 PetscErrorCode AdjointVecData::registerExternalFunctionOutput(ADVec vec) {
   Tape& tape = Number::getTape();
-  Real* primals;
 
-  PetscCall(VecGetArray(vec->vec, &primals));
-  for(PetscInt i = 0; i < vec->ad_size; i += 1) {
-    Wrapper temp = createRefType(primals[i], vec->ad_data[i]);
-    tape.registerExternalFunctionOutput(temp);
-  }
-
-  PetscCall(VecRestoreArray(vec->vec, &primals));
+  auto func = [&](PetscInt row, Wrapper& value) {
+    tape.registerExternalFunctionOutput(value);
+  };
+  PetscCall(VecIterateAllEntries(func, vec));
 
   return PETSC_SUCCESS;
 }

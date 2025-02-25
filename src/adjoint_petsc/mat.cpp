@@ -3,6 +3,7 @@
 #include <adjoint_petsc/util/petsc_missing.h>
 
 #include "util/mat_iterator_util.hpp"
+#include "util/vec_iterator_util.hpp"
 #include "util/dyadic_product_helper.hpp"
 
 AP_NAMESPACE_START
@@ -616,25 +617,17 @@ struct ADData_MatNorm : public ReverseDataBase<ADData_MatNorm> {
         }
       }
       else if(type == NORM_INFINITY) {
-        PetscInt low;
-        PetscInt high;
-        PetscCallVoid(MatGetOwnershipRange(x_v, &low, &high));
-        PetscInt range = high - low;
-
         Vec row_sums;
         PetscCallVoid(MatCreateVecs(x_v, &row_sums, NULL));
         PetscCallVoid(MatGetRowSumAbs(x_v, row_sums));
 
-        Real* row_sums_values;
-        PetscCallVoid(VecGetArray(row_sums, &row_sums_values));
-
-        for(PetscInt cur_row = 0; cur_row < range; cur_row += 1) {
-          if(row_sums_values[cur_row] == v_v) {
-            selected.insert(cur_row + low);
+        auto func = [&](PetscInt row, Real& value) {
+          if(value == v_v) {
+            selected.insert(row);
           }
-        }
+        };
+        VecIterateAllEntries(func, row_sums);
 
-        PetscCallVoid(VecRestoreArray(row_sums, &row_sums_values));
         PetscCallVoid(VecDestroy(&row_sums));
       }
 

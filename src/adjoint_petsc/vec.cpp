@@ -24,38 +24,18 @@ PetscErrorCode createAdjointVec(Vec* vec, FuncCreate create, FuncInit init, Pets
 
 PetscErrorCode VecAXPY(ADVec y, Number alpha, ADVec x) {
   // VecAXPY is purely local operation.
-  Real* x_data;
-  Real* y_data;
-
-  PetscCall(VecGetArray(x->vec, &x_data));
-  PetscCall(VecGetArray(y->vec, &y_data));
-
-  for(PetscInt i = 0; i < x->ad_size; i += 1) {
-    createRefType(y_data[i], y->ad_data[i]) += alpha * createRefType(x_data[i], x->ad_data[i]);
-  }
-
-  PetscCall(VecRestoreArray(x->vec, &x_data));
-  PetscCall(VecRestoreArray(y->vec, &y_data));
-
-  return PETSC_SUCCESS;
+  auto func = [&](PetscInt row, Wrapper& value_y, Wrapper& value_x) {
+    value_y += alpha * value_x;
+  };
+  return VecIterateAllEntries(func, y, x);
 }
 
 PetscErrorCode VecAYPX(ADVec y, Number beta, ADVec x) {
   // VecAYPX is purely local operation.
-  Real* x_data;
-  Real* y_data;
-
-  PetscCall(VecGetArray(x->vec, &x_data));
-  PetscCall(VecGetArray(y->vec, &y_data));
-
-  for(PetscInt i = 0; i < x->ad_size; i += 1) {
-    createRefType(y_data[i], y->ad_data[i]) = beta * createRefType(y_data[i], y->ad_data[i]) + createRefType(x_data[i], x->ad_data[i]);
-  }
-
-  PetscCall(VecRestoreArray(x->vec, &x_data));
-  PetscCall(VecRestoreArray(y->vec, &y_data));
-
-  return PETSC_SUCCESS;
+  auto func = [&](PetscInt row, Wrapper& value_y, Wrapper& value_x) {
+    value_y = beta * value_y + value_x;
+  };
+  return VecIterateAllEntries(func, y, x);
 }
 
 struct ADData_SetValues {
@@ -129,33 +109,21 @@ struct ADData_SetValues {
     bool active = tape.isActive() && 0.0 != active_sum;
 
     if(active) {
-      int local_size;
-      VecGetLocalSize(activity_vector, &local_size);
-
-      Real* activity_vector_data;
-      Real* vec_data;
-      VecGetArray(activity_vector, &activity_vector_data);
-      VecGetArray(vec->vec, &vec_data);
-
-
-      for(int i = 0; i < local_size; i += 1) {
-        if(0 != activity_vector_data[i]) {
-
-          Wrapper temp = createRefType(vec_data[i], vec->ad_data[i]);
+      int i = 0;
+      auto func = [&](PetscInt row, Real& value_a, Wrapper& value_vec) {
+        if(0 != value_a) {
           if(tape.isActive()) {
-
-            tape.registerExternalFunctionOutput(temp);
+            tape.registerExternalFunctionOutput(value_vec);
 
             lhs_out_positions.push_back(i);
-            lhs_identifiers.push_back(vec->ad_data[i]);
+            lhs_identifiers.push_back(value_vec.getIdentifier());
           } else {
-            tape.deactivateValue(temp);
+            tape.deactivateValue(value_vec);
           }
         }
-      }
-
-      VecRestoreArray(activity_vector, &activity_vector_data);
-      VecRestoreArray(vec->vec, &vec_data);
+        i += 1;
+      };
+      PetscCallVoid(VecIterateAllEntries(func, activity_vector, vec));
     }
 
     if(active) {
@@ -287,20 +255,10 @@ PetscErrorCode VecAssemblyEnd  (ADVec vec) {
 }
 
 PetscErrorCode VecCopy(ADVec x, ADVec y) {
-  Real* x_data;
-  Real* y_data;
-
-  PetscCall(VecGetArray(x->vec, &x_data));
-  PetscCall(VecGetArray(y->vec, &y_data));
-
-  for(PetscInt i = 0; i < x->ad_size; i += 1) {
-    createRefType(y_data[i], y->ad_data[i]) = createRefType(x_data[i], x->ad_data[i]);
-  }
-
-  PetscCall(VecRestoreArray(x->vec, &x_data));
-  PetscCall(VecRestoreArray(y->vec, &y_data));
-
-  return PETSC_SUCCESS;
+  auto func = [&](PetscInt row, Wrapper& value_x, Wrapper& value_y) {
+    value_y = value_x;
+  };
+  return VecIterateAllEntries(func, x, y);
 }
 
 PetscErrorCode VecCreate(MPI_Comm comm, ADVec* vec) {
@@ -315,17 +273,12 @@ PetscErrorCode VecCreate(MPI_Comm comm, ADVec* vec) {
 }
 
 PetscErrorCode VecDestroy(ADVec* vec) {
-  Real* vec_data;
-
-  PetscCall(VecGetArray((*vec)->vec, &vec_data));
-
   Tape& tape = Number::getTape();
-  for(PetscInt i = 0; i < (*vec)->ad_size; i += 1) {
-    Wrapper temp = createRefType(vec_data[i], (*vec)->ad_data[i]);
-    tape.deactivateValue(temp);
-  }
 
-  PetscCall(VecRestoreArray((*vec)->vec, &vec_data));
+  auto func = [&](PetscInt row, Wrapper& value) {
+    tape.deactivateValue(value);
+  };
+  PetscCall(VecIterateAllEntries(func, *vec));
 
   delete [] (*vec)->ad_data;
 
@@ -428,16 +381,10 @@ PetscErrorCode VecGetSize(ADVec vec, PetscInt* size) {
 }
 
 PetscErrorCode VecGetValues(ADVec x, PetscInt ni, PetscInt const* ix, Number* y) {
-  Real* values;
-  PetscCall(VecGetArray(x->vec, &values));
-
-  for(PetscInt i = 0; i < ni; i += 1) {
-    y[i] = createRefType(values[ix[i]], x->ad_data[ix[i]]);
-  }
-
-  PetscCall(VecRestoreArray(x->vec, &values));
-
-  return PETSC_SUCCESS;
+  auto func = [&](PetscInt i, PetscInt row, Wrapper& value) {
+    y[i] = value;
+  };
+  return VecIterateIndexSet(func, ni, ix, x);
 }
 
 struct ADData_VecMax : public ReverseDataBase<ADData_VecMax> {
@@ -461,15 +408,12 @@ struct ADData_VecMax : public ReverseDataBase<ADData_VecMax> {
     }
     else {
       // Update all values that are the same as max.
-      Real* x_data;
-
-      PetscCallVoid(VecGetArray(x->vec, &x_data));
-      for(int i = 0; i < x->ad_size; i += 1) {
-        if(val->getValue() == x_data[i]) {
-          x_i.push_back(x->ad_data[i]);
+      auto func = [&](PetscInt row, Wrapper& value_x) {
+        if(val->getValue() == value_x.getValue()) {
+          x_i.push_back(value_x.getIdentifier());
         }
-      }
-      PetscCallVoid(VecRestoreArray(x->vec, &x_data));
+      };
+      PetscCallVoid(VecIterateAllEntries(func, x));
     }
   }
 
@@ -615,59 +559,26 @@ PetscErrorCode VecNorm(ADVec x, NormType type, Number* val) {
 
 PetscErrorCode VecPointwiseDivide(ADVec w, ADVec x, ADVec y) {
   // VecPointwiseDivide is purely local operation.
-  Real* w_data;
-  Real* x_data;
-  Real* y_data;
-
-  PetscCall(VecGetArray(w->vec, &w_data));
-  PetscCall(VecGetArray(x->vec, &x_data));
-  PetscCall(VecGetArray(y->vec, &y_data));
-
-  for(PetscInt i = 0; i < x->ad_size; i += 1) {
-    createRefType(w_data[i], w->ad_data[i]) = createRefType(x_data[i], x->ad_data[i]) / createRefType(y_data[i], y->ad_data[i]);
-  }
-
-  PetscCall(VecRestoreArray(w->vec, &x_data));
-  PetscCall(VecRestoreArray(x->vec, &x_data));
-  PetscCall(VecRestoreArray(y->vec, &y_data));
-
-  return PETSC_SUCCESS;
+  auto func = [&](PetscInt row, Wrapper& value_w, Wrapper& value_x, Wrapper& value_y) {
+    value_w += value_y / value_x;
+  };
+  return VecIterateAllEntries(func, w, y, x);
 }
 
 PetscErrorCode VecPointwiseMult (ADVec w, ADVec x, ADVec y) {
   // VecPointwiseMult is purely local operation.
-  Real* w_data;
-  Real* x_data;
-  Real* y_data;
-
-  PetscCall(VecGetArray(w->vec, &w_data));
-  PetscCall(VecGetArray(x->vec, &x_data));
-  PetscCall(VecGetArray(y->vec, &y_data));
-
-  for(PetscInt i = 0; i < x->ad_size; i += 1) {
-    createRefType(w_data[i], w->ad_data[i]) = createRefType(x_data[i], x->ad_data[i]) * createRefType(y_data[i], y->ad_data[i]);
-  }
-
-  PetscCall(VecRestoreArray(w->vec, &x_data));
-  PetscCall(VecRestoreArray(x->vec, &x_data));
-  PetscCall(VecRestoreArray(y->vec, &y_data));
-
-  return PETSC_SUCCESS;
+  auto func = [&](PetscInt row, Wrapper& value_w, Wrapper& value_x, Wrapper& value_y) {
+    value_w += value_y * value_x;
+  };
+  return VecIterateAllEntries(func, w, y, x);
 }
 
 PetscErrorCode VecPow(ADVec x, Number p) {
   // VecPow is purely local operation.
-  Real* x_data;
-
-  PetscCall(VecGetArray(x->vec, &x_data));
-
-  for(PetscInt i = 0; i < x->ad_size; i += 1) {
-    createRefType(x_data[i], x->ad_data[i]) = pow(createRefType(x_data[i], x->ad_data[i]), p);
-  }
-
-  PetscCall(VecRestoreArray(x->vec, &x_data));
-
-  return PETSC_SUCCESS;
+  auto func = [&](PetscInt row, Wrapper& value_x) {
+    value_x = pow(value_x, p);
+  };
+  return VecIterateAllEntries(func, x);
 }
 
 PetscErrorCode VecRestoreArray  (ADVec vec, WrapperArray* a) {
@@ -680,32 +591,18 @@ PetscErrorCode VecRestoreArray  (ADVec vec, WrapperArray* a) {
 
 PetscErrorCode VecScale(ADVec x, Number alpha) {
   // VecScale is purely local operation.
-  Real* x_data;
-
-  PetscCall(VecGetArray(x->vec, &x_data));
-
-  for(PetscInt i = 0; i < x->ad_size; i += 1) {
-    createRefType(x_data[i], x->ad_data[i]) *= alpha;
-  }
-
-  PetscCall(VecRestoreArray(x->vec, &x_data));
-
-  return PETSC_SUCCESS;
+  auto func = [&](PetscInt row, Wrapper& value_x) {
+    value_x *= alpha;
+  };
+  return VecIterateAllEntries(func, x);
 }
 
 PetscErrorCode VecSet(ADVec x, Number alpha) {
   // VecSet is purely local operation.
-  Real* x_data;
-
-  PetscCall(VecGetArray(x->vec, &x_data));
-
-  for(PetscInt i = 0; i < x->ad_size; i += 1) {
-    createRefType(x_data[i], x->ad_data[i]) = alpha;
-  }
-
-  PetscCall(VecRestoreArray(x->vec, &x_data));
-
-  return PETSC_SUCCESS;
+  auto func = [&](PetscInt row, Wrapper& value_x) {
+    value_x = alpha;
+  };
+  return VecIterateAllEntries(func, x);
 }
 
 PetscErrorCode VecSetFromOptions(ADVec vec) {
@@ -773,17 +670,10 @@ PetscErrorCode VecSetValues(ADVec vec, PetscInt ni, PetscInt const* ix, Number c
 
 PetscErrorCode VecShift(ADVec x, Number shift) {
   // VecShift is purely local operation.
-  Real* x_data;
-
-  PetscCall(VecGetArray(x->vec, &x_data));
-
-  for(PetscInt i = 0; i < x->ad_size; i += 1) {
-    createRefType(x_data[i], x->ad_data[i]) += shift;
-  }
-
-  PetscCall(VecRestoreArray(x->vec, &x_data));
-
-  return PETSC_SUCCESS;
+  auto func = [&](PetscInt row, Wrapper& value_x) {
+    value_x += shift;
+  };
+  return VecIterateAllEntries(func, x);
 }
 
 struct ADData_VecSum : public ReverseDataBase<ADData_VecSum> {
@@ -853,23 +743,10 @@ PetscErrorCode VecView(ADVec vec, PetscViewer viewer) {
 
 PetscErrorCode VecWAXPY(ADVec w, Number alpha, ADVec x, ADVec y) {
   // VecWAXPY is purely local operation.
-  Real* w_data;
-  Real* x_data;
-  Real* y_data;
-
-  PetscCall(VecGetArray(w->vec, &w_data));
-  PetscCall(VecGetArray(x->vec, &x_data));
-  PetscCall(VecGetArray(y->vec, &y_data));
-
-  for(PetscInt i = 0; i < x->ad_size; i += 1) {
-    createRefType(w_data[i], w->ad_data[i]) = alpha * createRefType(x_data[i], x->ad_data[i]) + createRefType(y_data[i], y->ad_data[i]);
-  }
-
-  PetscCall(VecRestoreArray(w->vec, &w_data));
-  PetscCall(VecRestoreArray(x->vec, &x_data));
-  PetscCall(VecRestoreArray(y->vec, &y_data));
-
-  return PETSC_SUCCESS;
+  auto func = [&](PetscInt row, Wrapper& value_w, Wrapper& value_y, Wrapper& value_x) {
+    value_w = alpha * value_x + value_y;
+  };
+  return VecIterateAllEntries(func, w, y, x);
 }
 
 /*************************************************************
