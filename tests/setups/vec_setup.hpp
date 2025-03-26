@@ -21,6 +21,7 @@ struct VecSetup : public testing::Test {
 
     tape = &adjoint_petsc::Number::getTape();
     tape->reset();
+    tape->gradient(0) = -42.0; // Set an invalid value for the zero gradient.
     tape->setActive();
 
     for(adjoint_petsc::ADVec& cur : vec) {
@@ -57,6 +58,12 @@ struct VecSetup : public testing::Test {
     PetscCall(VecRestoreArray(vec, &values));
 
     return PETSC_SUCCESS;
+  }
+
+  void evaluateTape() {
+      EXPECT_DOUBLE_EQ(tape->gradient(0), -42.0);
+      tape->evaluate();
+      EXPECT_DOUBLE_EQ(tape->gradient(0), -42.0);
   }
 
   std::array<adjoint_petsc::ADVec, VECTOR_COUNT> vec;

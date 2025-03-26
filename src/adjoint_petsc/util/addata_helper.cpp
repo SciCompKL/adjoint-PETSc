@@ -48,8 +48,12 @@ PetscErrorCode AdjointVecData::getAdjointNoReset(Vec vec_b, VectorInterface* vi,
 }
 
 PetscErrorCode AdjointVecData::updateAdjoint(Vec vec_b, VectorInterface* vi, PetscInt dim) {
+  Tape& tape = Number::getTape();
+
   auto func = [&](PetscInt row, Real& value, Identifier id) {
-    vi->updateAdjoint(id, dim, value);
+    if( tape.isIdentifierActive(id)) {
+        vi->updateAdjoint(id, dim, value);
+    }
   };
   PetscCall(VecIterateAllEntries(func, vec_b, ids.data()));
 

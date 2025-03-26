@@ -41,7 +41,7 @@ TEST_F(MatSetup, SetValues) {
   };
   adjoint_petsc::PetscObjectIterateAllEntries(func, mat[0]);
 
-  tape->evaluate();
+  evaluateTape();
 
   EXPECT_EQ(s[0].getGradient(), 100.0); // Adjoint from first rank.
   EXPECT_EQ(s[1].getGradient(), 1000.0 + 10 * mpi_rank); // Adjoint from own rank.
@@ -82,7 +82,7 @@ TEST_F(MatSetup, Duplicate) {
   };
   adjoint_petsc::PetscObjectIterateAllEntries(func, c);
 
-  tape->evaluate();
+  evaluateTape();
 
   int sum = (mpi_size - 1) * mpi_size / 2; // 0 + 1 + ... + (mpi_size - 1)
   EXPECT_EQ(s[0].getGradient(), ENTRIES_PER_RANK * (100.0 + 10.0 * mpi_rank));
@@ -127,7 +127,7 @@ TEST_F(MatSetup, GetValues) {
     values[i + 4].setGradient(1000 + 10 * mpi_rank);
   }
 
-  tape->evaluate();
+  evaluateTape();
 
   EXPECT_EQ(s[0].getGradient(), 2 * 100 + 2 * 1000 + 4 * (10 * mpi_rank));
   EXPECT_EQ(s[1].getGradient(), 100 + 1000 + 2 * (10 * mpi_rank));
@@ -165,7 +165,7 @@ TEST_F(MatSetup, Mult) {
 
   PetscCallVoid(VecRestoreArray(vec[1], &values));
 
-  tape->evaluate();
+  evaluateTape();
 
   std::array<adjoint_petsc::Real, ENTRIES_PER_RANK * 2> expected_gradients = {1730, 600, 600, 620, 2830, 3960, 3960, 3840};
 
@@ -202,7 +202,7 @@ void performNormTest(Test& test, NormType type, adjoint_petsc::Real expected_val
   test.tape->registerOutput(norm);
   norm.setGradient(100 + 10 * test.mpi_rank);
 
-  test.tape->evaluate();
+  test.evaluateTape();
 
   EXPECT_DOUBLE_EQ(test.s[0].getGradient(), expected_grad[0]);
   EXPECT_DOUBLE_EQ(test.s[1].getGradient(), expected_grad[1]);
@@ -264,13 +264,11 @@ TEST_F(MatSetup, ZeroEntries) {
   auto func = [&] (PetscInt row, PetscInt col, adjoint_petsc::Wrapper& value) {
     tape->registerOutput(value);
 
-    EXPECT_EQ(value.getIdentifier(), 0.0);
-
-    value.setGradient(100.0);
+    EXPECT_EQ(value.getIdentifier(), 0);
   };
   PetscObjectIterateAllEntries(func, mat[0]);
 
-  tape->evaluate();
+  evaluateTape();
 
   EXPECT_EQ(s[0].getGradient(), 0.0);
   EXPECT_EQ(s[1].getGradient(), 0.0);

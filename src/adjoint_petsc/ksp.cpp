@@ -131,7 +131,9 @@ struct ADData_KSPSolve : public ReverseDataBase<ADData_KSPSolve> {
       entry_x_v = x_v[row - low];
       PetscCallVoid(dyadic.getValue(b_b, col, &entry_b_b));
 
-      vi->updateAdjoint(id, cur_dim, -entry_x_v * entry_b_b);
+      if( tape->isIdentifierActive(id)) {
+        vi->updateAdjoint(id, cur_dim, -entry_x_v * entry_b_b);
+      }
     };
     for(; cur_dim < dim; cur_dim += 1) {
       x_i.getAdjoint(x_b, vi, cur_dim);
@@ -144,8 +146,6 @@ struct ADData_KSPSolve : public ReverseDataBase<ADData_KSPSolve> {
         PetscCallVoid(PetscObjectIterateAllEntries(dyadic_update, A_v, A_i));
       }
     }
-
-    vi->resetAdjointVec(0); // Reset id zero, this avoids the check for the updateAdjoint methods.
 
     PetscCallVoid(x_i.freeAdjoint(&x_b));
     PetscCallVoid(b_i.freeAdjoint(&b_b));

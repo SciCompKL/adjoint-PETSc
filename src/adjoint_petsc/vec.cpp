@@ -327,7 +327,6 @@ struct ADData_VecDot : public ReverseDataBase<ADData_VecDot> {
         vi->updateAdjoint(y_i[i], d, x_v[i] * adj[d]);
       }
     }
-    vi->resetAdjointVec(0); // Reset id zero, this avoids the check for the updateAdjoint methods.
   }
 };
 
@@ -433,7 +432,6 @@ struct ADData_VecMax : public ReverseDataBase<ADData_VecMax> {
     for(size_t i = 0; i < x_i.size(); i += 1) {
       vi->updateAdjointVec(x_i[i], adj.data());
     }
-    vi->resetAdjointVec(0); // Reset id zero, this avoids the check for the updateAdjoint methods.
   }
 };
 
@@ -495,9 +493,11 @@ struct ADData_VecNorm : public ReverseDataBase<ADData_VecNorm> {
 
     if(type == NORM_1 || type == NORM_1_AND_2) {
       for(size_t i = 0; i < x_i.size(); i += 1) {
-        for(int d = 0; d < dim; d += 1) {
-          if(x_v[i] < 0.0) { vi->updateAdjoint(x_i[i], d, -adj[d]); }
-          else if(x_v[i] > 0.0) { vi->updateAdjoint(x_i[i], d, adj[d]); }
+        if( tape->isIdentifierActive(x_i[i])) {
+          for(int d = 0; d < dim; d += 1) {
+            if(x_v[i] < 0.0) { vi->updateAdjoint(x_i[i], d, -adj[d]); }
+            else if(x_v[i] > 0.0) { vi->updateAdjoint(x_i[i], d, adj[d]); }
+          }
         }
       }
     }
@@ -508,18 +508,24 @@ struct ADData_VecNorm : public ReverseDataBase<ADData_VecNorm> {
       Real* adj_offset = adj.data() + pos * dim;
 
       for(size_t i = 0; i < x_i.size(); i += 1) {
-        Real jac = 2.0 * x_v[i];
-        for(int d = 0; d < dim; d += 1) {
-          vi->updateAdjoint(x_i[i], d, jac * adj_offset[d]);
+        if( tape->isIdentifierActive(x_i[i])) {
+          Real jac = 2.0 * x_v[i];
+          for(int d = 0; d < dim; d += 1) {
+            if( tape->isIdentifierActive(x_i[i])) {
+              vi->updateAdjoint(x_i[i], d, jac * adj_offset[d]);
+            }
+          }
         }
       }
     }
     else if(type == NORM_MAX) {
       for(size_t i = 0; i < x_i.size(); i += 1) {
-        if(abs(x_v[i]) == val_v) {
-          for(int d = 0; d < dim; d += 1) {
-            if(x_v[i] < 0.0) { vi->updateAdjoint(x_i[i], d, -adj[d]); }
-            else if(x_v[i] > 0.0) { vi->updateAdjoint(x_i[i], d, adj[d]); }
+        if( tape->isIdentifierActive(x_i[i])) {
+          if(abs(x_v[i]) == val_v) {
+            for(int d = 0; d < dim; d += 1) {
+              if(x_v[i] < 0.0) { vi->updateAdjoint(x_i[i], d, -adj[d]); }
+              else if(x_v[i] > 0.0) { vi->updateAdjoint(x_i[i], d, adj[d]); }
+            }
           }
         }
       }
@@ -527,8 +533,6 @@ struct ADData_VecNorm : public ReverseDataBase<ADData_VecNorm> {
     else {
       // TODO: throw error.
     }
-
-    vi->resetAdjointVec(0); // Reset id zero, this avoids the check for the updateAdjoint methods.
   }
 };
 
@@ -703,7 +707,6 @@ struct ADData_VecSum : public ReverseDataBase<ADData_VecSum> {
     for(size_t i = 0; i < x_i.size(); i += 1) {
       vi->updateAdjointVec(x_i[i], adj.data());
     }
-    vi->resetAdjointVec(0); // Reset id zero, this avoids the check for the updateAdjoint methods.
   }
 };
 

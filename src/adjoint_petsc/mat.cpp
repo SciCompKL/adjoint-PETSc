@@ -521,7 +521,9 @@ struct ADData_MatMult : public ReverseDataBase<ADData_MatMult> {
       PetscCallVoid(VecGetValues(y_b, 1, &row, &entry_y_b));
       PetscCallVoid(dyadic.getValue(x_v, col, &entry_x_v));
 
-      vi->updateAdjoint(id, cur_dim, entry_y_b * entry_x_v);
+      if(tape->isIdentifierActive(id)) {
+        vi->updateAdjoint(id, cur_dim, entry_y_b * entry_x_v);
+      }
     };
 
     for(; cur_dim < dim; cur_dim += 1) {
@@ -532,8 +534,6 @@ struct ADData_MatMult : public ReverseDataBase<ADData_MatMult> {
 
       PetscCallVoid(PetscObjectIterateAllEntries(dyadic_update, A_v, A_i));
     }
-
-    vi->resetAdjointVec(0); // Reset id zero, this avoids the check for the updateAdjoint methods.
 
     PetscCallVoid(x_i.freeAdjoint(&x_b));
     PetscCallVoid(y_i.freeAdjoint(&y_b));
@@ -648,7 +648,9 @@ struct ADData_MatNorm : public ReverseDataBase<ADData_MatNorm> {
         }
 
         for(int i = 0; i < dim; i += 1) {
-          vi->updateAdjoint(id, i, v_b[i] * jac);
+          if( tape->isIdentifierActive(id)) {
+            vi->updateAdjoint(id, i, v_b[i] * jac);
+          }
         }
       };
       PetscObjectIterateAllEntries(func, x_v, x_i);
@@ -656,7 +658,9 @@ struct ADData_MatNorm : public ReverseDataBase<ADData_MatNorm> {
     else if(type == NORM_FROBENIUS) {
       auto func = [&](PetscInt row, PetscInt col, Real& value, Identifier& id) {
         for(int i = 0; i < dim; i += 1) {
-          vi->updateAdjoint(id, i, v_b[i] * value / v_v);
+          if(tape->isIdentifierActive(id)) {
+            vi->updateAdjoint(id, i, v_b[i] * value / v_v);
+          }
         }
       };
       PetscObjectIterateAllEntries(func, x_v, x_i);
@@ -664,7 +668,6 @@ struct ADData_MatNorm : public ReverseDataBase<ADData_MatNorm> {
     else {
       // TODO: Throw error
     }
-    vi->resetAdjointVec(0); // Reset id zero, this avoids the check for the updateAdjoint methods.
   }
 };
 

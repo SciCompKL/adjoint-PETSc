@@ -41,7 +41,7 @@ TEST_F(KSPSetup, Solve) {
   }
   PetscCallVoid(VecRestoreArray(vec[1], &values));
 
-  tape->evaluate();
+  evaluateTape();
 
   std::array<adjoint_petsc::Real, 2> expected_gradient_s0 = {
     -31.671653651023323e+00,
