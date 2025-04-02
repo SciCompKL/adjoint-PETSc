@@ -9,7 +9,7 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(CoDiPack_DIR  ${CMAKE_CURRENT_SOURCE_DIR}/codipack/cmake CACHE PATH "Path to CoDiPack cmake files.")
-set(PESTc_DIR     Not_Defined CACHE PATH "Path to petsc")
+set(PETSc_DIR     Not_Defined CACHE PATH "Path to petsc")
 
 option(BUILD_SHARED_LIBS "Build using shared libraries" ON)
 
