@@ -59,23 +59,27 @@ PetscErrorCode KSPSetOperators(ADKSP ksp, ADMat Amat, ADMat Pmat) {
 }
 
 struct ADData_KSPSolve : public ReverseDataBase<ADData_KSPSolve> {
-  AdjointVecData    b_i;
+  AdjointVecData      b_i;
 
-  std::vector<Real> x_v;
-  AdjointVecData    x_i;
 
-  Mat               A_v;
-  ADMatData*        A_i;
-  Mat               P_v;
+  Vec                 x_v;
+  DyadicProductHelper x_dyadic;
+  AdjointVecData      x_i;
+
+  Mat                 A_v;
+  ADMatData*          A_i;
+  Mat                 P_v;
 
   SharedKSP ksp;
 
-  ADData_KSPSolve(ADKSP ksp, bool active_A, ADVec b, ADVec x) : b_i(b), x_v(0), x_i(x), A_v(), A_i(), P_v(), ksp(ksp->ksp) {
-    x_v.resize(x_i.ids.size());
-    PetscCallVoid(AdjointVecData::extractPrimal(x, x_v.data()));
-
+  ADData_KSPSolve(ADKSP ksp, bool active_A, ADVec b, ADVec x) : b_i(b), x_v(), x_dyadic(), x_i(x), A_v(), A_i(), P_v(), ksp(ksp->ksp) {
     if(active_A) {
       ADMatCopyForReverse(ksp->Amat, &A_v, &A_i);
+
+      PetscCallVoid(VecDuplicate(x->vec, &x_v));
+      PetscCallVoid(VecCopy(x->vec, x_v));
+      x_dyadic.init(A_v, x_v);
+      x_dyadic.communicateValues(x_v);
     } else {
       ADMatCopyForReverse(ksp->Amat, &A_v, nullptr);
     }
@@ -97,6 +101,7 @@ struct ADData_KSPSolve : public ReverseDataBase<ADData_KSPSolve> {
 
     if(nullptr != A_i) {
       delete A_i;
+      PetscCallVoid(VecDestroy(&x_v));
     }
   }
 
@@ -115,24 +120,19 @@ struct ADData_KSPSolve : public ReverseDataBase<ADData_KSPSolve> {
 
     PetscCallVoid(KSPSetOperators(*ksp.get(), A_v, P_v));
 
-    DyadicProductHelper dyadic = {};
-    if(A_i != nullptr) {
-      dyadic.init(A_v, b_b);
-    }
-
     int dim = vi->getVectorSize();
 
     int cur_dim = 0;
     auto dyadic_update = [&] (PetscInt row, PetscInt col, Real& value, Identifier& id) {
       (void) value;
 
-      Real entry_x_v;
       Real entry_b_b;
-      entry_x_v = x_v[row - low];
-      PetscCallVoid(dyadic.getValue(b_b, col, &entry_b_b));
+      Real entry_x_v;
+      PetscCallVoid(VecGetValues(b_b, 1, &row, &entry_b_b));
+      PetscCallVoid(x_dyadic.getValue(x_v, col, &entry_x_v));
 
       if( tape->isIdentifierActive(id)) {
-        vi->updateAdjoint(id, cur_dim, -entry_x_v * entry_b_b);
+        vi->updateAdjoint(id, cur_dim, -entry_b_b * entry_x_v);
       }
     };
     for(; cur_dim < dim; cur_dim += 1) {
@@ -142,7 +142,6 @@ struct ADData_KSPSolve : public ReverseDataBase<ADData_KSPSolve> {
       b_i.updateAdjoint(b_b, vi, cur_dim);
 
       if(A_i != nullptr) {
-        dyadic.communicateValues(b_b);
         PetscCallVoid(PetscObjectIterateAllEntries(dyadic_update, A_v, A_i));
       }
     }

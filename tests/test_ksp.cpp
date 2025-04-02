@@ -48,12 +48,12 @@ TEST_F(KSPSetup, Solve) {
     -5.7056884773163032e+00
   };
   std::array<adjoint_petsc::Real, 2> expected_gradient_s1 = {
-    -53.629178677011353,
-    -6.1091820226503879
-  };
-  std::array<adjoint_petsc::Real, 2> expected_gradient_s2 = {
     -16.894665079987327,
     -4.3014379189128462
+  };
+  std::array<adjoint_petsc::Real, 2> expected_gradient_s2 = {
+    -53.629178677011353,
+    -6.1091820226503879
   };
   std::array<adjoint_petsc::Real, 2> expected_gradient_s4 = {
       59.508325854533922,
