@@ -121,7 +121,8 @@ TEST_F(VecSetup, VecGetValues) {
   for(int i = 0; i < ENTRIES_PER_RANK; i += 1) { values[i] = s[i]; }
   PetscCallVoid(VecRestoreArray(vec[0], &values));
 
-  std::array<PetscInt, 2> ix = {0, 3};
+  int offset = ENTRIES_PER_RANK * mpi_rank;
+  std::array<PetscInt, 2> ix = {0 + offset , 3 + offset};
   std::array<adjoint_petsc::Number, 2> v = {};
   PetscCallVoid(VecGetValues(vec[0], 2, ix.data(), v.data()));
 

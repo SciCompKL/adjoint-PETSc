@@ -83,7 +83,7 @@ namespace iterator_implementation {
     PetscCall(VecGetOwnershipRange(vec, &low, nullptr));
 
     for(PetscInt i = 0; i < n; i += 1) {
-      func(i, ix[i] + low, values.value(ix[i])...);
+      func(i, ix[i], values.value(ix[i] - low)...);
     }
     return PETSC_SUCCESS;
   }
