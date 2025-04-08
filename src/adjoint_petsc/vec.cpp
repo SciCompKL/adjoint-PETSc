@@ -185,7 +185,7 @@ struct ADData_SetValues {
         }
       }
 
-      VecGetValues(adjoint_vec, (int)positions.size(), positions.data(), data->adjoint_data);
+      VecGetValuesNonLocal(adjoint_vec, (int)positions.size(), positions.data(), data->adjoint_data);
     }
 
     VecDestroy(&adjoint_vec);
