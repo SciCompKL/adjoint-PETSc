@@ -3,6 +3,7 @@
 #include <adjoint_petsc/util/petsc_missing.h>
 
 #include "util/addata_helper.hpp"
+#include "util/exception.hpp"
 #include "util/vec_iterator_util.hpp"
 
 AP_NAMESPACE_START
@@ -491,18 +492,7 @@ struct ADData_VecNorm : public ReverseDataBase<ADData_VecNorm> {
 
     MPI_Allreduce(MPI_IN_PLACE, adj.data(), dim * size, MPI_DOUBLE, MPI_SUM, comm);
 
-    if(type == NORM_1 || type == NORM_1_AND_2) {
-      for(size_t i = 0; i < x_i.size(); i += 1) {
-        if( tape->isIdentifierActive(x_i[i])) {
-          for(int d = 0; d < dim; d += 1) {
-            if(x_v[i] < 0.0) { vi->updateAdjoint(x_i[i], d, -adj[d]); }
-            else if(x_v[i] > 0.0) { vi->updateAdjoint(x_i[i], d, adj[d]); }
-          }
-        }
-      }
-    }
-
-    if(type == NORM_2 || type == NORM_1_AND_2|| type == NORM_FROBENIUS) {
+    auto norm_2 = [&] () {
       int pos = (type == NORM_1_AND_2) ? 1 : 0;
 
       Real* adj_offset = adj.data() + pos * dim;
@@ -517,6 +507,24 @@ struct ADData_VecNorm : public ReverseDataBase<ADData_VecNorm> {
           }
         }
       }
+    };
+
+    if(type == NORM_1 || type == NORM_1_AND_2) {
+      for(size_t i = 0; i < x_i.size(); i += 1) {
+        if( tape->isIdentifierActive(x_i[i])) {
+          for(int d = 0; d < dim; d += 1) {
+            if(x_v[i] < 0.0) { vi->updateAdjoint(x_i[i], d, -adj[d]); }
+            else if(x_v[i] > 0.0) { vi->updateAdjoint(x_i[i], d, adj[d]); }
+          }
+        }
+      }
+
+      if(type == NORM_1_AND_2) {
+        norm_2();
+      }
+    }
+    else if(type == NORM_2 || type == NORM_1_AND_2|| type == NORM_FROBENIUS) {
+      norm_2();
     }
     else if(type == NORM_MAX) {
       for(size_t i = 0; i < x_i.size(); i += 1) {
@@ -531,7 +539,7 @@ struct ADData_VecNorm : public ReverseDataBase<ADData_VecNorm> {
       }
     }
     else {
-      // TODO: throw error.
+      AP_EXCEPTION("Norm of kind %d not implemented.", (int)type);
     }
   }
 };
@@ -665,7 +673,7 @@ PetscErrorCode VecSetValues(ADVec vec, PetscInt ni, PetscInt const* ix, Number c
   }
 
   if(data->mode != iora) {
-    std::cerr << "Different insert mode" << std::endl;
+    AP_EXCEPTION("Different insert mode");
   }
 
   data->addEntries(ni, ix, y);

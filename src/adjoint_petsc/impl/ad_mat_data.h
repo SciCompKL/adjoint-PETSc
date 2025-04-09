@@ -40,4 +40,9 @@ struct ADMatAIJData : public ADMatData {
   static ADMatAIJData* cast(ADMatData* d);
 };
 
+ADMatType ADMatDataPTypeToEnum(MatType ptype);
+
+ADMatType ADMatGetADType(ADMat mat);
+ADMatType ADMatGetADType(Mat mat);
+
 AP_NAMESPACE_END

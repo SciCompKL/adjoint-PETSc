@@ -34,7 +34,7 @@ TEST_F(MatSetup, SetValues) {
       EXPECT_EQ(value.getValue(), mpi_rank_prev * 10 + 4);
       value.setGradient(100000 + 10 * mpi_rank);
     } else {
-      // TODO: Throw error.
+      AP_EXCEPTION("Wrong row/col access.");
     }
   };
   adjoint_petsc::MatIterateAllEntries(func, mat[0]);
@@ -147,7 +147,9 @@ TEST_F(MatSetup, Mult) {
   PetscCallVoid(MatMult(mat[0], vec[0], vec[1]));
 
   std::array<adjoint_petsc::Real, ENTRIES_PER_RANK * 2> expected_values = {184, 24, 24, 54, 344, 504, 504, 374};
-  // TODO: Throw error if mpi_ranks != 2
+  if(2 != mpi_size) {
+    AP_EXCEPTION("Test only implemented for two mpi ranks.");
+  }
 
   adjoint_petsc::WrapperArray values = {};
   PetscCallVoid(VecGetArray(vec[1], &values));
@@ -223,7 +225,10 @@ TEST_F(MatSetup, Norm_1) {
 }
 
 TEST_F(MatSetup, Norm_F) {
-  // TODO: Throw error for mpi_size != 2
+  if(2 != mpi_size) {
+    AP_EXCEPTION("Test only implemented for two mpi ranks.");
+  }
+
   adjoint_petsc::Real expected_value = 42.33202097703346;
   std::array<adjoint_petsc::Real, 3 * 2> expected_gradients = {
       19.84313483298442, 39.68626966596885, 59.52940449895328,

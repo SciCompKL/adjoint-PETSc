@@ -4,6 +4,8 @@
 
 #include "../impl/ad_mat_data.h"
 
+#include "exception.hpp"
+
 AP_NAMESPACE_START
 
 namespace iterator_implementation {
@@ -182,7 +184,7 @@ namespace iterator_implementation {
   }
 
   template<typename Func, typename ... Values>
-  PetscErrorCode accessMatSeqAIJ(Func&& func, Mat mat, PetscInt const* colmap, PetscInt row, PetscInt col, MatSeqAIJValueAccess<Values>&& ... values) {
+  PetscErrorCode accessMatSeqAIJ(Func&& func, PetscInt row, PetscInt col, Mat mat, PetscInt const* colmap, MatSeqAIJValueAccess<Values>&& ... values) {
 
     PetscInt const* row_offset;
     PetscInt const* column_ids;
@@ -226,9 +228,9 @@ namespace iterator_implementation {
     PetscCall(MatGetOwnershipRange(mat, &row_low, &row_high));
 
     if(col_low <= col && col < col_high) {
-      PetscCall(accessMatSeqAIJ(std::forward<Func>(func), matd, nullptr, row - row_low, col - col_low, values.accessMatD()...));
+      PetscCall(accessMatSeqAIJ(std::forward<Func>(func), row - row_low, col - col_low, matd, nullptr, values.accessMatD()...));
     } else {
-      auto r = accessMatSeqAIJ(std::forward<Func>(func), mato, colmap, row - row_low, col, values.accessMatO()...);
+      auto r = accessMatSeqAIJ(std::forward<Func>(func), row - row_low, col, mato, colmap, values.accessMatO()...);
       PetscCall(r);
     }
 
@@ -241,28 +243,60 @@ namespace iterator_implementation {
 
 template<typename Func, typename First, typename ... Other>
 PetscErrorCode MatIterateAllEntries(Func&& func, First&& mat, Other&& ... other) {
-  // TODO: Check matrix type and select iterator
+  ADMatType type = ADMatGetADType(mat);
 
-  return iterator_implementation::iterateMatAIJ(
-      func,
-      iterator_implementation::getUnderlyingMat(std::forward<First>(mat)),
-      iterator_implementation::MatAIJValueAccess<std::remove_cvref_t<First>>(std::forward<First>(mat)),
-      iterator_implementation::MatAIJValueAccess<std::remove_cvref_t<Other>>(std::forward<Other>(other))...
-    );
+  if(ADMatType::MatAIJ == type) {
+    return iterator_implementation::iterateMatAIJ(
+        func,
+        iterator_implementation::getUnderlyingMat(std::forward<First>(mat)),
+        iterator_implementation::MatAIJValueAccess<std::remove_cvref_t<First>>(std::forward<First>(mat)),
+        iterator_implementation::MatAIJValueAccess<std::remove_cvref_t<Other>>(std::forward<Other>(other))...
+      );
+  }
+  else if(ADMatType::MatSeqAIJ == type) {
+    return iterator_implementation::iterateMatSeqAIJI(
+        func,
+        iterator_implementation::getUnderlyingMat(std::forward<First>(mat)),
+        nullptr,
+        iterator_implementation::MatSeqAIJValueAccess<std::remove_cvref_t<First>>(std::forward<First>(mat)),
+        iterator_implementation::MatSeqAIJValueAccess<std::remove_cvref_t<Other>>(std::forward<Other>(other))...
+      );
+  }
+  else {
+    return PETSC_ERR_ARG_WRONGSTATE;
+  }
 }
 
 template<typename Func, typename First, typename ... Other>
 PetscErrorCode MatAccessValue(Func&& func, PetscInt row, PetscInt col, First&& mat, Other&& ... other) {
-  // TODO: Check matrix type and select iterator
+  ADMatType type = ADMatGetADType(mat);
 
-  return iterator_implementation::accessMatAIJ(
-      func,
-      row,
-      col,
-      iterator_implementation::getUnderlyingMat(std::forward<First>(mat)),
-      iterator_implementation::MatAIJValueAccess<std::remove_cvref_t<First>>(std::forward<First>(mat)),
-      iterator_implementation::MatAIJValueAccess<std::remove_cvref_t<Other>>(std::forward<Other>(other))...
+  if(ADMatType::MatAIJ == type) {
+    return iterator_implementation::accessMatAIJ(
+        func,
+        row,
+        col,
+        iterator_implementation::getUnderlyingMat(std::forward<First>(mat)),
+        iterator_implementation::MatAIJValueAccess<std::remove_cvref_t<First>>(std::forward<First>(mat)),
+        iterator_implementation::MatAIJValueAccess<std::remove_cvref_t<Other>>(std::forward<Other>(other))...
       );
+  }
+  else if(ADMatType::MatSeqAIJ == type) {
+    return iterator_implementation::accessMatSeqAIJ(
+        func,
+        row,
+        col,
+        iterator_implementation::getUnderlyingMat(std::forward<First>(mat)),
+        nullptr,
+        iterator_implementation::MatSeqAIJValueAccess<std::remove_cvref_t<First>>(std::forward<First>(mat)),
+        iterator_implementation::MatSeqAIJValueAccess<std::remove_cvref_t<Other>>(std::forward<Other>(other))...
+      );
+  }
+  else {
+    return PETSC_ERR_ARG_WRONGSTATE;
+  }
+
+
 }
 
 AP_NAMESPACE_END

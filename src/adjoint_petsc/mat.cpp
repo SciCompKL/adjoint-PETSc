@@ -3,6 +3,7 @@
 #include <adjoint_petsc/util/petsc_missing.h>
 
 #include "util/addata_helper.hpp"
+#include "util/exception.hpp"
 #include "util/mat_iterator_util.hpp"
 #include "util/vec_iterator_util.hpp"
 #include "util/dyadic_product_helper.hpp"
@@ -672,7 +673,7 @@ struct ADData_MatNorm : public ReverseDataBase<ADData_MatNorm> {
       MatIterateAllEntries(func, x_v, x_i);
     }
     else {
-      // TODO: Throw error
+      AP_EXCEPTION("Reverse of norm kind %d is not implemented.", type);
     }
   }
 };
@@ -772,12 +773,26 @@ PetscErrorCode MatAIJGetEntrySize(Mat mat, PetscInt* diag_entries, PetscInt* off
  */
 
 void ADMatCreateADData(ADMat mat) {
-  // TODO: Check for matrix type
-  PetscInt diag_size;
-  PetscInt off_diag_size;
+  MatType ptype;
+  PetscCallVoid(MatGetType(mat->mat, &ptype));
 
-  PetscCallVoid(MatAIJGetEntrySize(mat->mat, &diag_size, &off_diag_size));
-  mat->mat_i = new ADMatAIJData(diag_size, off_diag_size);
+  ADMatType type = ADMatDataPTypeToEnum(ptype);
+
+  if(type == ADMatType::MatAIJ) {
+    PetscInt diag_size;
+    PetscInt off_diag_size;
+
+    PetscCallVoid(MatAIJGetEntrySize(mat->mat, &diag_size, &off_diag_size));
+    mat->mat_i = new ADMatAIJData(diag_size, off_diag_size);
+  }
+  else if(type == ADMatType::MatSeqAIJ){
+    PetscInt size;
+
+    PetscCallVoid(MatSeqAIJGetEntrySize(mat->mat, &size));
+    mat->mat_i = new ADMatSeqAIJData(size);
+  } else {
+    AP_EXCEPTION("Unsupported matrix type %d.", (int)type);
+  }
 }
 
 void ADMatCopyForReverse(ADMat mat, Mat* newm, ADMatData** newd) {

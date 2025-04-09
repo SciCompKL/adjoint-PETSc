@@ -18,6 +18,7 @@ struct ADMatData {
   virtual ~ADMatData() {};
   virtual ADMatData* clone() = 0;
 
+  void checkType(int castType);
 };
 
 struct ADMatImpl {

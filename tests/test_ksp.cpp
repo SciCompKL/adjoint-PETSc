@@ -30,7 +30,9 @@ TEST_F(KSPSetup, Solve) {
      2.3398358240986528e-01,
      3.0234143319806489e-01,
   };
-  // TODO: Throw error if mpi_ranks != 2
+  if(2 != mpi_size) {
+    AP_EXCEPTION("Test only implemented for two mpi ranks.");
+  }
 
   adjoint_petsc::WrapperArray values = {};
   PetscCallVoid(VecGetArray(vec[1], &values));
