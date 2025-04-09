@@ -27,6 +27,10 @@ struct ADKSPImpl {
 
 using ADKSP = ADKSPImpl*;
 
+/*-------------------------------------------------------------------------------------------------
+ * PETSc functions
+ */
+
 PetscErrorCode KSPCreate                 (MPI_Comm comm, ADKSP *inksp);
 PetscErrorCode KSPDestroy                (ADKSP *ksp);
 PetscErrorCode KSPGetIterationNumber     (ADKSP ksp, PetscInt *its);

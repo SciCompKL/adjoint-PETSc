@@ -4,10 +4,11 @@
 
 #include "mat_iterator_util.hpp"
 
-
-
-
 AP_NAMESPACE_START
+
+/*-------------------------------------------------------------------------------------------------
+ * Vec functions
+ */
 
 PetscErrorCode VecGetValuesNonLocal(Vec vec, PetscInt ni, PetscInt ix[], PetscScalar y[]) {
   Vec         temp;
@@ -40,6 +41,10 @@ PetscErrorCode VecGetValuesNonLocal(Vec vec, PetscInt ni, PetscInt ix[], PetscSc
 
   return PETSC_SUCCESS;
 }
+
+/*-------------------------------------------------------------------------------------------------
+ * Mat functions
+ */
 
 PetscErrorCode MatGetColumnSumAbs(Mat mat, PetscScalar y[]) {
   PetscInt rows;

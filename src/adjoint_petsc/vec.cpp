@@ -7,7 +7,7 @@
 
 AP_NAMESPACE_START
 
-/*************************************************************
+/*-------------------------------------------------------------------------------------------------
  * Helper functions
  */
 
@@ -19,8 +19,8 @@ PetscErrorCode createAdjointVec(Vec* vec, FuncCreate create, FuncInit init, Pets
   return PETSC_SUCCESS;
 }
 
-/*************************************************************
- * Vector functions
+/*-------------------------------------------------------------------------------------------------
+ * PETSc functions
  */
 
 PetscErrorCode VecAXPY(ADVec y, Number alpha, ADVec x) {
@@ -739,8 +739,8 @@ PetscErrorCode VecWAXPY(ADVec w, Number alpha, ADVec x, ADVec y) {
   return VecIterateAllEntries(func, w, y, x);
 }
 
-/*************************************************************
- * ADVector functions
+/*-------------------------------------------------------------------------------------------------
+ * AD specific functions
  */
 
 void ADVecCreateADData(ADVec vec) {
@@ -773,6 +773,10 @@ void ADVecIsActive(ADVec vec, bool* a) {
   MPI_Allreduce(MPI_IN_PLACE, &active, 1, MPI_INTEGER, MPI_SUM, comm);
   *a = 0 != active;
 }
+
+/*-------------------------------------------------------------------------------------------------
+ * Debug functions
+ */
 
 PetscErrorCode ADVecDebugOutputImpl(Vec vec_v, Identifier* vec_i, std::string m, int id, bool forward, VectorInterface* vi, AdjointVecData* vec_data) {
   std::ostream& out = ADPetscOptionsGetDebugOutputStream();

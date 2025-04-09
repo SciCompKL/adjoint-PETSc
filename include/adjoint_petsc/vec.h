@@ -24,6 +24,10 @@ struct ADVecImpl {
 
 using ADVec = ADVecImpl*;
 
+/*-------------------------------------------------------------------------------------------------
+ * PETSc functions
+ */
+
 PetscErrorCode VecAXPY              (ADVec y, Number alpha, ADVec x);
 PetscErrorCode VecAYPX              (ADVec y, Number beta, ADVec x);
 PetscErrorCode VecAssemblyBegin     (ADVec vec);
@@ -57,8 +61,16 @@ PetscErrorCode VecSum               (ADVec v, Number *sum);
 PetscErrorCode VecView              (ADVec vec, PetscViewer viewer);
 PetscErrorCode VecWAXPY             (ADVec w, Number alpha, ADVec x, ADVec y);
 
+/*-------------------------------------------------------------------------------------------------
+ * AD specific functions
+ */
+
 void ADVecCreateADData(ADVec vec);
 void ADVecIsActive    (ADVec vec, bool* a);
+
+/*-------------------------------------------------------------------------------------------------
+ * Debug functions
+ */
 
 void ADVecDebugOutput(ADVec vec, std::string m, int id);
 void ADVecDebugOutput(Vec vec, std::string m, int id);

@@ -2,23 +2,13 @@
 
 #include <adjoint_petsc/options.h>
 
-
-
 AP_NAMESPACE_START
 struct ADPetscOptions {
-  bool          debug_output_primal;
-  bool          debug_output_reverse;
-  bool          debug_output_identifiers;
-  int           debug_output_precission;
-  std::ostream* debug_output_stream;
-
-  ADPetscOptions() :
-    debug_output_primal        (false),
-    debug_output_reverse       (true),
-    debug_output_identifiers   (true),
-    debug_output_precission    (12),
-    debug_output_stream        (&std::cerr)
-  {}
+  bool          debug_output_primal      = false;
+  bool          debug_output_reverse     = true;
+  bool          debug_output_identifiers = true;
+  int           debug_output_precission  = 12;
+  std::ostream* debug_output_stream      = &std::cerr;
 };
 
 ADPetscOptions ad_gobal_options = {};

@@ -9,6 +9,10 @@
 
 AP_NAMESPACE_START
 
+/*-------------------------------------------------------------------------------------------------
+ * PETSc functions
+ */
+
 struct LhsInData {
   PetscInt row;
   PetscInt col;
@@ -761,6 +765,10 @@ PetscErrorCode MatAIJGetEntrySize(Mat mat, PetscInt* diag_entries, PetscInt* off
   return PETSC_SUCCESS;
 }
 
+/*-------------------------------------------------------------------------------------------------
+ * AD specific functions
+ */
+
 void ADMatCreateADData(ADMat mat) {
   // TODO: Check for matrix type
   PetscInt diag_size;
@@ -794,6 +802,10 @@ void ADMatIsActive(ADMat mat, bool* a) {
   MPI_Allreduce(MPI_IN_PLACE, &active, 1, MPI_INTEGER, MPI_SUM, comm);
   *a = 0 != active;
 }
+
+/*-------------------------------------------------------------------------------------------------
+ * Debug functions
+ */
 
 struct MatrixEntry {
   PetscInt row;

@@ -6,8 +6,6 @@
 
 
 TEST_F(MatSetup, SetValues) {
-
-
   std::array<PetscInt, 4> rows = {0, mpi_rank * ENTRIES_PER_RANK + 1, mpi_rank * ENTRIES_PER_RANK + 2,      mpi_rank_next * ENTRIES_PER_RANK + 3};
   std::array<PetscInt, 4> cols = {0, mpi_rank * ENTRIES_PER_RANK + 1, mpi_rank_next * ENTRIES_PER_RANK + 2, mpi_rank * ENTRIES_PER_RANK + 3};
   std::array<adjoint_petsc::Number, 4> values = {s[0], s[1], s[2], s[3]};

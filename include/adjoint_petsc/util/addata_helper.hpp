@@ -6,14 +6,20 @@
 
 AP_NAMESPACE_START
 
+// TODO: move to src
+
 template<typename Impl>
 struct ReverseDataBase {
 
-  // Interface functions.
+  /*-------------------------------------------------------------------------------------------------
+   * Interface functions
+   */
 
   void reverse(Tape* tape, VectorInterface* vi);
 
-  // Helper functions.
+  /*-------------------------------------------------------------------------------------------------
+   * Helper functions
+   */
 
   void push() {
     Number::getTape().pushExternalFunction(codi::ExternalFunction<Tape>::create(&reverse, this, &free));
@@ -49,6 +55,7 @@ struct AdjointVecData {
   PetscErrorCode getAdjointNoReset(Vec vec_b, VectorInterface* vi, PetscInt dim);
   PetscErrorCode updateAdjoint(Vec vec_b, VectorInterface* vi, PetscInt dim);
 
+  // TODO: define as vector functions
   static PetscErrorCode makePassive(ADVec vec);
   static PetscErrorCode registerExternalFunctionOutput(ADVec vec);
 

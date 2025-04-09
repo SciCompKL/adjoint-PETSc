@@ -239,6 +239,7 @@ namespace iterator_implementation {
   inline Mat getUnderlyingMat(ADMat mat) { return mat->mat; }
 }
 
+// TODO: Rename functions.
 template<typename Func, typename First, typename ... Other>
 PetscErrorCode PetscObjectIterateAllEntries(Func&& func, First&& mat, Other&& ... other) {
   // TODO: Check matrix type and select iterator

@@ -30,6 +30,10 @@ struct ADMatImpl {
 
 using ADMat = ADMatImpl*;
 
+/*-------------------------------------------------------------------------------------------------
+ * PETSc functions
+ */
+
 PetscErrorCode MatAssemblyBegin          (ADMat mat, MatAssemblyType type);
 PetscErrorCode MatAssemblyEnd            (ADMat mat, MatAssemblyType type);
 PetscErrorCode MatConvert                (ADMat mat, MatType newtype, MatReuse reuse, ADMat *M);
@@ -57,9 +61,17 @@ PetscErrorCode MatSetValues              (ADMat mat, PetscInt m, const PetscInt 
 PetscErrorCode MatView                   (ADMat mat, PetscViewer viewer);
 PetscErrorCode MatZeroEntries            (ADMat mat);
 
+/*-------------------------------------------------------------------------------------------------
+ * AD specific functions
+ */
+
 void ADMatCreateADData  (ADMat mat);
 void ADMatCopyForReverse(ADMat mat, Mat* newm, ADMatData** newd);
 void ADMatIsActive      (ADMat mat, bool* a);
+
+/*-------------------------------------------------------------------------------------------------
+ * Debug functions
+ */
 
 void ADMatDebugOutput(ADMat mat, std::string m, int id);
 void ADMatDebugOutput(Mat mat, std::string m, int id);

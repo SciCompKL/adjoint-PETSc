@@ -6,15 +6,19 @@
 
 AP_NAMESPACE_START
 
-    KSP& ADKSPImpl::getKSP() {
-      return *ksp.get();
-    }
+KSP& ADKSPImpl::getKSP() {
+  return *ksp.get();
+}
 
 void deleteKSP(KSP* ksp) {
   PetscCallVoid(KSPDestroy(ksp));
 
   delete ksp;
 }
+
+/*-------------------------------------------------------------------------------------------------
+ * PETSc functions
+ */
 
 PetscErrorCode KSPCreate(MPI_Comm comm, ADKSP *inksp) {
   *inksp = new ADKSPImpl();
