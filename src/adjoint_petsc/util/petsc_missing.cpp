@@ -54,7 +54,7 @@ PetscErrorCode MatGetColumnSumAbs(Mat mat, PetscScalar y[]) {
 
   std::fill(y, &y[cols], PetscScalar());
 
-  auto func = [&] (PetscInt row, PetscInt col, PetscScalar& value) {
+  auto func = [&] (PetscInt AP_U(row), PetscInt col, PetscScalar& value) {
     y[col] += abs(value);
   };
   MatIterateAllEntries(func, mat);

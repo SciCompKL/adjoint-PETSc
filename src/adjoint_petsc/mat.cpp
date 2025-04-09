@@ -225,7 +225,7 @@ struct ADData_MatSetValues {
     }
   }
 
-  static void step_reverse(Tape* tape, void* d, VectorInterface* va) {
+  static void step_reverse(Tape* AP_U(tape), void* d, VectorInterface* va) {
     ADData_MatSetValues* data = (ADData_MatSetValues*)d;
     int ad_vec_size = va->getVectorSize();
 
@@ -242,7 +242,7 @@ struct ADData_MatSetValues {
     }
   }
 
-  static void assemble_reverse(Tape* tape, void* d, VectorInterface* va) {
+  static void assemble_reverse(Tape* AP_U(tape), void* d, VectorInterface* va) {
     ADData_MatSetValues* data = (ADData_MatSetValues*)d;
 
     data->adjoint_step = (int)data->step_boundaries.size() - 1;
@@ -374,7 +374,9 @@ PetscErrorCode MatAssemblyEnd(ADMat mat, MatAssemblyType type) {
 
   return PETSC_SUCCESS;
 }
-PetscErrorCode MatConvert                (ADMat mat, MatType newtype, MatReuse reuse, ADMat *M) {
+PetscErrorCode MatConvert(ADMat mat, MatType newtype, MatReuse reuse, ADMat *M) {
+  AP_UNUSED(mat, newtype, reuse, M);
+
   throw std::runtime_error("'MatConvert' not implemented.");
 
   return PETSC_SUCCESS;
@@ -395,6 +397,8 @@ PetscErrorCode MatCreateAIJ(MPI_Comm comm, PetscInt m, PetscInt n, PetscInt M, P
 }
 
 PetscErrorCode MatCreateDense(MPI_Comm comm, PetscInt m, PetscInt n, PetscInt M, PetscInt N, Number *data, ADMat *A) {
+  AP_UNUSED(comm, m, n, M, N, data, A);
+
   std::cout << "Not yet supported." << std::endl;
   return PETSC_ERR_ARG_WRONGSTATE;
 }
@@ -403,9 +407,7 @@ PetscErrorCode MatDestroy(ADMat* mat) {
 
   if(nullptr != (*mat)->mat_i) {
     Tape& tape = Number::getTape();
-    MatIterateAllEntries([&](PetscInt row, PetscInt col, Wrapper& el) {
-      (void)row;
-      (void)col;
+    MatIterateAllEntries([&](PetscInt AP_U(row), PetscInt AP_U(col), Wrapper& el) {
       tape.deactivateValue(el);
     }, *mat);
 
@@ -427,7 +429,7 @@ PetscErrorCode MatDuplicate(ADMat mat, MatDuplicateOption op, ADMat* newv) {
   ADMatCreateADData(*newv);
 
   if(op == MAT_COPY_VALUES) {
-    auto func = [&] (PetscInt row, PetscInt col, Wrapper& a, Wrapper& b) {
+    auto func = [&] (PetscInt AP_U(row), PetscInt AP_U(col), Wrapper& a, Wrapper& b) {
       b = a;
     };
     PetscCall(MatIterateAllEntries(func, mat, *newv));
@@ -519,7 +521,7 @@ struct ADData_MatMult : public ReverseDataBase<ADData_MatMult> {
 
 
     int cur_dim = 0;
-    auto dyadic_update = [&] (PetscInt row, PetscInt col, Real& value, Identifier& id) {
+    auto dyadic_update = [&] (PetscInt row, PetscInt col, Real& AP_U(value), Identifier& id) {
       Real entry_y_b;
       Real entry_x_v;
       PetscCallVoid(VecGetValues(y_b, 1, &row, &entry_y_b));
@@ -660,7 +662,7 @@ struct ADData_MatNorm : public ReverseDataBase<ADData_MatNorm> {
       MatIterateAllEntries(func, x_v, x_i);
     }
     else if(type == NORM_FROBENIUS) {
-      auto func = [&](PetscInt row, PetscInt col, Real& value, Identifier& id) {
+      auto func = [&](PetscInt AP_U(row), PetscInt AP_U(col), Real& value, Identifier& id) {
         for(int i = 0; i < dim; i += 1) {
           if(tape->isIdentifierActive(id)) {
             vi->updateAdjoint(id, i, v_b[i] * value / v_v);
@@ -732,7 +734,7 @@ PetscErrorCode MatView(ADMat mat, PetscViewer viewer) {
 }
 
 PetscErrorCode MatZeroEntries(ADMat mat) {
-  auto func = [&] (PetscInt row, PetscInt col, Wrapper& value) {
+  auto func = [&] (PetscInt AP_U(row), PetscInt AP_U(col), Wrapper& value) {
     value = Real();
   };
   return MatIterateAllEntries(func, mat);
@@ -791,7 +793,7 @@ void ADMatIsActive(ADMat mat, bool* a) {
   Tape& tape = Number::getTape();
 
   int active = 0;
-  auto func = [&](PetscInt row, PetscInt col, Wrapper& value) {
+  auto func = [&](PetscInt AP_U(row), PetscInt AP_U(col), Wrapper& value) {
     active += tape.isIdentifierActive(value.getIdentifier());
   };
   PetscCallVoid(MatIterateAllEntries(func, mat));
@@ -868,7 +870,7 @@ PetscErrorCode ADMatDebugOutputImpl(Mat mat_v, ADMatData* mat_i, std::string m, 
           MatIterateAllEntries(func, mat_v, mat_i);
         } else {
           out << "Rank: " << cur_rank << " dim: " << cur_dim <<"\n";
-          auto func = [&](PetscInt row, PetscInt col, Real& value, Identifier& id) {
+          auto func = [&](PetscInt row, PetscInt col, Real& AP_U(value), Identifier& id) {
             data.push_back(MatrixEntry({row, col, vi->getAdjoint(id, cur_dim), id}));
           };
 
@@ -904,7 +906,7 @@ struct ADData_MatDebugOutput : public ReverseDataBase<ADData_MatDebugOutput> {
     delete mat_i;
   }
 
-  void reverse(Tape* tape, VectorInterface* vi) {
+  void reverse(Tape* AP_U(tape), VectorInterface* vi) {
     ADMatDebugOutputImpl(mat_v, mat_i, m, id, false, vi);
   }
 };

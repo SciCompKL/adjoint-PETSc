@@ -39,7 +39,7 @@ PetscErrorCode AdjointVecData::getAdjoint(Vec vec_b, VectorInterface* vi, PetscI
 }
 
 PetscErrorCode AdjointVecData::getAdjointNoReset(Vec vec_b, VectorInterface* vi, PetscInt dim) {
-  auto func = [&](PetscInt row, Real& value, Identifier id) {
+  auto func = [&](PetscInt AP_U(row), Real& value, Identifier id) {
     value = vi->getAdjoint(id, dim);
   };
   PetscCall(VecIterateAllEntries(func, vec_b, ids.data()));
@@ -50,7 +50,7 @@ PetscErrorCode AdjointVecData::getAdjointNoReset(Vec vec_b, VectorInterface* vi,
 PetscErrorCode AdjointVecData::updateAdjoint(Vec vec_b, VectorInterface* vi, PetscInt dim) {
   Tape& tape = Number::getTape();
 
-  auto func = [&](PetscInt row, Real& value, Identifier id) {
+  auto func = [&](PetscInt AP_U(row), Real& value, Identifier id) {
     if( tape.isIdentifierActive(id)) {
         vi->updateAdjoint(id, dim, value);
     }

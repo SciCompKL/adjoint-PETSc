@@ -41,7 +41,7 @@ target_sources(adjoint_petsc
 )
 
 target_include_directories(adjoint_petsc PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include ${PETSc_DIR}/include)
-target_compile_options    (adjoint_petsc PRIVATE -Wall -pedantic)
+target_compile_options    (adjoint_petsc PRIVATE -Wall -pedantic -Wextra -Werror)
 
 target_link_libraries(adjoint_petsc PUBLIC CoDiPack)
 target_link_libraries(adjoint_petsc INTERFACE petsc mpi)

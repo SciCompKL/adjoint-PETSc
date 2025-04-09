@@ -26,7 +26,7 @@ struct DyadicProductHelper {
   PetscErrorCode init(Mat A, Vec vec) {
     PetscCall(VecGetOwnershipRange(vec, &low, &high));
 
-    auto dyadic_init = [&] (PetscInt row, PetscInt col, Real& value) {
+    auto dyadic_init = [&] (PetscInt AP_U(row), PetscInt col, Real& AP_U(value)) {
       if( col < low || high <= col) {
         col_list.insert(col);
       }

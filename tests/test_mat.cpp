@@ -37,7 +37,7 @@ TEST_F(MatSetup, SetValues) {
       // TODO: Throw error.
     }
   };
-  adjoint_petsc::PetscObjectIterateAllEntries(func, mat[0]);
+  adjoint_petsc::MatIterateAllEntries(func, mat[0]);
 
   evaluateTape();
 
@@ -78,7 +78,7 @@ TEST_F(MatSetup, Duplicate) {
       value.setGradient(10000 + 10 * mpi_rank);
     }
   };
-  adjoint_petsc::PetscObjectIterateAllEntries(func, c);
+  adjoint_petsc::MatIterateAllEntries(func, c);
 
   evaluateTape();
 
@@ -264,7 +264,7 @@ TEST_F(MatSetup, ZeroEntries) {
 
     EXPECT_EQ(value.getIdentifier(), 0);
   };
-  PetscObjectIterateAllEntries(func, mat[0]);
+  MatIterateAllEntries(func, mat[0]);
 
   evaluateTape();
 

@@ -25,7 +25,7 @@ PetscErrorCode createAdjointVec(Vec* vec, FuncCreate create, FuncInit init, Pets
 
 PetscErrorCode VecAXPY(ADVec y, Number alpha, ADVec x) {
   // VecAXPY is purely local operation.
-  auto func = [&](PetscInt row, Wrapper& value_y, Wrapper& value_x) {
+  auto func = [&](PetscInt AP_U(row), Wrapper& value_y, Wrapper& value_x) {
     value_y += alpha * value_x;
   };
   return VecIterateAllEntries(func, y, x);
@@ -33,7 +33,7 @@ PetscErrorCode VecAXPY(ADVec y, Number alpha, ADVec x) {
 
 PetscErrorCode VecAYPX(ADVec y, Number beta, ADVec x) {
   // VecAYPX is purely local operation.
-  auto func = [&](PetscInt row, Wrapper& value_y, Wrapper& value_x) {
+  auto func = [&](PetscInt AP_U(row), Wrapper& value_y, Wrapper& value_x) {
     value_y = beta * value_y + value_x;
   };
   return VecIterateAllEntries(func, y, x);
@@ -111,7 +111,7 @@ struct ADData_SetValues {
 
     if(active) {
       int i = 0;
-      auto func = [&](PetscInt row, Real& value_a, Wrapper& value_vec) {
+      auto func = [&](PetscInt AP_U(row), Real& value_a, Wrapper& value_vec) {
         if(0 != value_a) {
           if(tape.isActive()) {
             tape.registerExternalFunctionOutput(value_vec);
@@ -136,7 +136,7 @@ struct ADData_SetValues {
     VecDestroy(&activity_vector);
   }
 
-  static void step_reverse(Tape* tape, void* d, VectorInterface* va) {
+  static void step_reverse(Tape* AP_U(tape), void* d, VectorInterface* va) {
     ADData_SetValues* data = (ADData_SetValues*)d;
     int ad_vec_size = va->getVectorSize();
 
@@ -153,7 +153,7 @@ struct ADData_SetValues {
     }
   }
 
-  static void assemble_reverse(Tape* tape, void* d, VectorInterface* va) {
+  static void assemble_reverse(Tape* AP_U(tape), void* d, VectorInterface* va) {
     ADData_SetValues* data = (ADData_SetValues*)d;
     int ad_vec_size = va->getVectorSize();
 
@@ -256,7 +256,7 @@ PetscErrorCode VecAssemblyEnd  (ADVec vec) {
 }
 
 PetscErrorCode VecCopy(ADVec x, ADVec y) {
-  auto func = [&](PetscInt row, Wrapper& value_x, Wrapper& value_y) {
+  auto func = [&](PetscInt AP_U(row), Wrapper& value_x, Wrapper& value_y) {
     value_y = value_x;
   };
   return VecIterateAllEntries(func, x, y);
@@ -276,7 +276,7 @@ PetscErrorCode VecCreate(MPI_Comm comm, ADVec* vec) {
 PetscErrorCode VecDestroy(ADVec* vec) {
   Tape& tape = Number::getTape();
 
-  auto func = [&](PetscInt row, Wrapper& value) {
+  auto func = [&](PetscInt AP_U(row), Wrapper& value) {
     tape.deactivateValue(value);
   };
   PetscCall(VecIterateAllEntries(func, *vec));
@@ -381,7 +381,7 @@ PetscErrorCode VecGetSize(ADVec vec, PetscInt* size) {
 }
 
 PetscErrorCode VecGetValues(ADVec x, PetscInt ni, PetscInt const* ix, Number* y) {
-  auto func = [&](PetscInt i, PetscInt row, Wrapper& value) {
+  auto func = [&](PetscInt i, PetscInt AP_U(row), Wrapper& value) {
     y[i] = value;
   };
   return VecIterateIndexSet(func, ni, ix, x);
@@ -408,7 +408,7 @@ struct ADData_VecMax : public ReverseDataBase<ADData_VecMax> {
     }
     else {
       // Update all values that are the same as max.
-      auto func = [&](PetscInt row, Wrapper& value_x) {
+      auto func = [&](PetscInt AP_U(row), Wrapper& value_x) {
         if(val->getValue() == value_x.getValue()) {
           x_i.push_back(value_x.getIdentifier());
         }
@@ -564,7 +564,7 @@ PetscErrorCode VecNorm(ADVec x, NormType type, Number* val) {
 
 PetscErrorCode VecPointwiseDivide(ADVec w, ADVec x, ADVec y) {
   // VecPointwiseDivide is purely local operation.
-  auto func = [&](PetscInt row, Wrapper& value_w, Wrapper& value_x, Wrapper& value_y) {
+  auto func = [&](PetscInt AP_U(row), Wrapper& value_w, Wrapper& value_x, Wrapper& value_y) {
     value_w += value_y / value_x;
   };
   return VecIterateAllEntries(func, w, y, x);
@@ -572,7 +572,7 @@ PetscErrorCode VecPointwiseDivide(ADVec w, ADVec x, ADVec y) {
 
 PetscErrorCode VecPointwiseMult (ADVec w, ADVec x, ADVec y) {
   // VecPointwiseMult is purely local operation.
-  auto func = [&](PetscInt row, Wrapper& value_w, Wrapper& value_x, Wrapper& value_y) {
+  auto func = [&](PetscInt AP_U(row), Wrapper& value_w, Wrapper& value_x, Wrapper& value_y) {
     value_w += value_y * value_x;
   };
   return VecIterateAllEntries(func, w, y, x);
@@ -580,7 +580,7 @@ PetscErrorCode VecPointwiseMult (ADVec w, ADVec x, ADVec y) {
 
 PetscErrorCode VecPow(ADVec x, Number p) {
   // VecPow is purely local operation.
-  auto func = [&](PetscInt row, Wrapper& value_x) {
+  auto func = [&](PetscInt AP_U(row), Wrapper& value_x) {
     value_x = pow(value_x, p);
   };
   return VecIterateAllEntries(func, x);
@@ -596,7 +596,7 @@ PetscErrorCode VecRestoreArray  (ADVec vec, WrapperArray* a) {
 
 PetscErrorCode VecScale(ADVec x, Number alpha) {
   // VecScale is purely local operation.
-  auto func = [&](PetscInt row, Wrapper& value_x) {
+  auto func = [&](PetscInt AP_U(row), Wrapper& value_x) {
     value_x *= alpha;
   };
   return VecIterateAllEntries(func, x);
@@ -604,7 +604,7 @@ PetscErrorCode VecScale(ADVec x, Number alpha) {
 
 PetscErrorCode VecSet(ADVec x, Number alpha) {
   // VecSet is purely local operation.
-  auto func = [&](PetscInt row, Wrapper& value_x) {
+  auto func = [&](PetscInt AP_U(row), Wrapper& value_x) {
     value_x = alpha;
   };
   return VecIterateAllEntries(func, x);
@@ -675,7 +675,7 @@ PetscErrorCode VecSetValues(ADVec vec, PetscInt ni, PetscInt const* ix, Number c
 
 PetscErrorCode VecShift(ADVec x, Number shift) {
   // VecShift is purely local operation.
-  auto func = [&](PetscInt row, Wrapper& value_x) {
+  auto func = [&](PetscInt AP_U(row), Wrapper& value_x) {
     value_x += shift;
   };
   return VecIterateAllEntries(func, x);
@@ -733,7 +733,7 @@ PetscErrorCode VecView(ADVec vec, PetscViewer viewer) {
 
 PetscErrorCode VecWAXPY(ADVec w, Number alpha, ADVec x, ADVec y) {
   // VecWAXPY is purely local operation.
-  auto func = [&](PetscInt row, Wrapper& value_w, Wrapper& value_y, Wrapper& value_x) {
+  auto func = [&](PetscInt AP_U(row), Wrapper& value_w, Wrapper& value_y, Wrapper& value_x) {
     value_w = alpha * value_x + value_y;
   };
   return VecIterateAllEntries(func, w, y, x);
@@ -762,7 +762,7 @@ void ADVecIsActive(ADVec vec, bool* a) {
   Tape& tape = Number::getTape();
 
   int active = 0;
-  auto func = [&](PetscInt row, Wrapper& value) {
+  auto func = [&](PetscInt AP_U(row), Wrapper& value) {
     active += tape.isIdentifierActive(value.getIdentifier());
   };
   PetscCallVoid(VecIterateAllEntries(func, vec));
@@ -792,7 +792,7 @@ PetscErrorCode ADVecExtractPrimal(ADVec vec, Real* vec_p) {
 PetscErrorCode ADVecMakePassive(ADVec vec) {
   Tape& tape = Number::getTape();
 
-  auto func = [&](PetscInt row, Wrapper& value) {
+  auto func = [&](PetscInt AP_U(row), Wrapper& value) {
     tape.deactivateValue(value);
   };
   VecIterateAllEntries(func, vec);
@@ -803,7 +803,7 @@ PetscErrorCode ADVecMakePassive(ADVec vec) {
 PetscErrorCode ADVecRegisterExternalFunctionOutput(ADVec vec) {
   Tape& tape = Number::getTape();
 
-  auto func = [&](PetscInt row, Wrapper& value) {
+  auto func = [&](PetscInt AP_U(row), Wrapper& value) {
     tape.registerExternalFunctionOutput(value);
   };
   PetscCall(VecIterateAllEntries(func, vec));
@@ -880,7 +880,7 @@ struct ADData_VecDebugOutput : public ReverseDataBase<ADData_VecDebugOutput> {
   ADData_VecDebugOutput(ADVec vec, std::string m, int id) : vec_i(vec), m(m), id(id) {}
 
 
-  void reverse(Tape* tape, VectorInterface* vi) {
+  void reverse(Tape* AP_U(tape), VectorInterface* vi) {
     Vec vec_b;
     PetscCallVoid(vec_i.createAdjoint(&vec_b, 1));
     PetscCallVoid(ADVecDebugOutputImpl(vec_b, vec_i.ids.data(), m, id, false, vi, &vec_i));
