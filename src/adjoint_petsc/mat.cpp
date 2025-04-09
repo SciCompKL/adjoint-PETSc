@@ -556,12 +556,12 @@ PetscErrorCode MatMult(ADMat mat, ADVec x, ADVec y) {
   bool active_y = active_mat || active_x;
 
   if(active_y) {
-    AdjointVecData::registerExternalFunctionOutput(y);
+    ADVecRegisterExternalFunctionOutput(y);
 
     ADData_MatMult* data = new ADData_MatMult(mat, x, y);
     data->push();
   } else {
-    AdjointVecData::makePassive(y);
+    ADVecMakePassive(y);
   }
 
   return PETSC_SUCCESS;

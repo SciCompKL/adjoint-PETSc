@@ -68,6 +68,11 @@ PetscErrorCode VecWAXPY             (ADVec w, Number alpha, ADVec x, ADVec y);
 void ADVecCreateADData(ADVec vec);
 void ADVecIsActive    (ADVec vec, bool* a);
 
+PetscErrorCode ADVecExtractIdentifier(ADVec vec, Identifier* vec_i);
+PetscErrorCode ADVecExtractPrimal(ADVec vec, Real* vec_p);
+PetscErrorCode ADVecMakePassive(ADVec vec);
+PetscErrorCode ADVecRegisterExternalFunctionOutput(ADVec vec);
+
 /*-------------------------------------------------------------------------------------------------
  * Debug functions
  */

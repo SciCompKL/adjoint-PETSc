@@ -303,10 +303,10 @@ struct ADData_VecDot : public ReverseDataBase<ADData_VecDot> {
   ADData_VecDot(ADVec x, ADVec y, Number* val) : comm(MPI_COMM_NULL), val_i(val->getIdentifier()), x_i(x->ad_size),
       x_v(x->ad_size), y_i(x->ad_size), y_v(x->ad_size) {
     PetscCallVoid(PetscObjectGetComm((PetscObject)x->vec, &comm));
-    PetscCallVoid(AdjointVecData::extractIdentifier(x, x_i.data()));
-    PetscCallVoid(AdjointVecData::extractPrimal(x, x_v.data()));
-    PetscCallVoid(AdjointVecData::extractIdentifier(y, y_i.data()));
-    PetscCallVoid(AdjointVecData::extractPrimal(y, y_v.data()));
+    PetscCallVoid(ADVecExtractIdentifier(x, x_i.data()));
+    PetscCallVoid(ADVecExtractPrimal(x, x_v.data()));
+    PetscCallVoid(ADVecExtractIdentifier(y, y_i.data()));
+    PetscCallVoid(ADVecExtractPrimal(y, y_v.data()));
   }
 
   void reverse(Tape* tape, VectorInterface* vi) {
@@ -472,8 +472,8 @@ struct ADData_VecNorm : public ReverseDataBase<ADData_VecNorm> {
       val_i[i] = val[i].getIdentifier();
     }
 
-    PetscCallVoid(AdjointVecData::extractPrimal(x, x_v.data()));
-    PetscCallVoid(AdjointVecData::extractIdentifier(x, x_i.data()));
+    PetscCallVoid(ADVecExtractPrimal(x, x_v.data()));
+    PetscCallVoid(ADVecExtractIdentifier(x, x_i.data()));
   }
 
   void reverse(Tape* tape, VectorInterface* vi) {
@@ -689,7 +689,7 @@ struct ADData_VecSum : public ReverseDataBase<ADData_VecSum> {
 
   ADData_VecSum(ADVec x, Number* val) : comm(MPI_COMM_NULL), val_i(val->getIdentifier()), x_i(x->ad_size) {
     PetscCallVoid(PetscObjectGetComm((PetscObject)x->vec, &comm));
-    PetscCallVoid(AdjointVecData::extractIdentifier(x, x_i.data()));
+    PetscCallVoid(ADVecExtractIdentifier(x, x_i.data()));
   }
 
   void reverse(Tape* tape, VectorInterface* vi) {
@@ -772,6 +772,43 @@ void ADVecIsActive(ADVec vec, bool* a) {
 
   MPI_Allreduce(MPI_IN_PLACE, &active, 1, MPI_INTEGER, MPI_SUM, comm);
   *a = 0 != active;
+}
+
+PetscErrorCode ADVecExtractIdentifier(ADVec vec, Identifier* vec_i) {
+  std::copy(vec->ad_data, &vec->ad_data[vec->ad_size], vec_i);
+
+  return PETSC_SUCCESS;
+}
+
+PetscErrorCode ADVecExtractPrimal(ADVec vec, Real* vec_p) {
+  Real* values;
+  PetscCall(VecGetArray(vec->vec, &values));
+  std::copy(values, &values[vec->ad_size], vec_p);
+  PetscCall(VecRestoreArray(vec->vec, &values));
+
+  return PETSC_SUCCESS;
+}
+
+PetscErrorCode ADVecMakePassive(ADVec vec) {
+  Tape& tape = Number::getTape();
+
+  auto func = [&](PetscInt row, Wrapper& value) {
+    tape.deactivateValue(value);
+  };
+  VecIterateAllEntries(func, vec);
+
+  return PETSC_SUCCESS;
+}
+
+PetscErrorCode ADVecRegisterExternalFunctionOutput(ADVec vec) {
+  Tape& tape = Number::getTape();
+
+  auto func = [&](PetscInt row, Wrapper& value) {
+    tape.registerExternalFunctionOutput(value);
+  };
+  PetscCall(VecIterateAllEntries(func, vec));
+
+  return PETSC_SUCCESS;
 }
 
 /*-------------------------------------------------------------------------------------------------

@@ -167,11 +167,11 @@ PetscErrorCode KSPSolve(ADKSP ksp, ADVec b, ADVec x) {
 
   if(active_b || active_A) {
 
-    PetscCall(AdjointVecData::registerExternalFunctionOutput(x));
+    PetscCall(ADVecRegisterExternalFunctionOutput(x));
     ADData_KSPSolve* data = new ADData_KSPSolve(ksp, active_A, b, x);
     data->push();
   } else {
-    PetscCall(AdjointVecData::makePassive(x));
+    PetscCall(ADVecMakePassive(x));
   }
 
   return PETSC_SUCCESS;
