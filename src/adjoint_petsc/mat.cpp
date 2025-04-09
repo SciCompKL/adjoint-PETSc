@@ -1,8 +1,8 @@
 #include <adjoint_petsc/mat.h>
 #include <adjoint_petsc/options.h>
-#include <adjoint_petsc/util/addata_helper.hpp>
 #include <adjoint_petsc/util/petsc_missing.h>
 
+#include "util/addata_helper.hpp"
 #include "util/mat_iterator_util.hpp"
 #include "util/vec_iterator_util.hpp"
 #include "util/dyadic_product_helper.hpp"

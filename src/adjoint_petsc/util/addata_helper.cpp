@@ -1,8 +1,8 @@
-#include <adjoint_petsc/util/addata_helper.hpp>
 
 #include <algorithm>
 
-#include "../../../src/adjoint_petsc/util/vec_iterator_util.hpp"
+#include "addata_helper.hpp"
+#include "vec_iterator_util.hpp"
 
 AP_NAMESPACE_START
 

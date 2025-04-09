@@ -1,8 +1,8 @@
 #include <adjoint_petsc/options.h>
 #include <adjoint_petsc/vec.h>
 #include <adjoint_petsc/util/petsc_missing.h>
-#include <adjoint_petsc/util/addata_helper.hpp>
 
+#include "util/addata_helper.hpp"
 #include "util/vec_iterator_util.hpp"
 
 AP_NAMESPACE_START

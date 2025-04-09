@@ -1,6 +1,6 @@
 #include <adjoint_petsc/ksp.h>
-#include <adjoint_petsc/util/addata_helper.hpp>
 
+#include "util/addata_helper.hpp"
 #include "util/mat_iterator_util.hpp"
 #include "util/dyadic_product_helper.hpp"
 

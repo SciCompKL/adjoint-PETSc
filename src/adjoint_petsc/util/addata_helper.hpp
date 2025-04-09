@@ -1,12 +1,10 @@
 #pragma once
 
-#include "base.hpp"
-#include "codi_def.hpp"
-#include "../vec.h"
+#include <adjoint_petsc/util/base.hpp>
+#include <adjoint_petsc/util/codi_def.hpp>
+#include <adjoint_petsc/vec.h>
 
 AP_NAMESPACE_START
-
-// TODO: move to src
 
 template<typename Impl>
 struct ReverseDataBase {
