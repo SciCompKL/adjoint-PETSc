@@ -212,7 +212,7 @@ struct ADData_MatSetValues {
             tape.deactivateValue(value);
           }
         };
-        PetscCallVoid(ADMatAccessValue(func, cur.row, cur.col, mat));
+        PetscCallVoid(MatAccessValue(func, cur.row, cur.col, mat));
 
         pos += 1;
       }
@@ -403,7 +403,7 @@ PetscErrorCode MatDestroy(ADMat* mat) {
 
   if(nullptr != (*mat)->mat_i) {
     Tape& tape = Number::getTape();
-    PetscObjectIterateAllEntries([&](PetscInt row, PetscInt col, Wrapper& el) {
+    MatIterateAllEntries([&](PetscInt row, PetscInt col, Wrapper& el) {
       (void)row;
       (void)col;
       tape.deactivateValue(el);
@@ -430,7 +430,7 @@ PetscErrorCode MatDuplicate(ADMat mat, MatDuplicateOption op, ADMat* newv) {
     auto func = [&] (PetscInt row, PetscInt col, Wrapper& a, Wrapper& b) {
       b = a;
     };
-    PetscCall(PetscObjectIterateAllEntries(func, mat, *newv));
+    PetscCall(MatIterateAllEntries(func, mat, *newv));
   }
 
   return PETSC_SUCCESS;
@@ -467,7 +467,7 @@ PetscErrorCode MatGetValues(ADMat mat, PetscInt m, const PetscInt idxm[], PetscI
       auto func = [&] (Wrapper& wrap) {
         v[row * n + col] = wrap;
       };
-      PetscCall(ADMatAccessValue(func, idxm[row], idxn[col], mat));
+      PetscCall(MatAccessValue(func, idxm[row], idxn[col], mat));
     }
   }
 
@@ -536,7 +536,7 @@ struct ADData_MatMult : public ReverseDataBase<ADData_MatMult> {
       PetscCallVoid(MatMultTranspose(A_v, y_b, x_b));
       x_i.updateAdjoint(x_b, vi, cur_dim);
 
-      PetscCallVoid(PetscObjectIterateAllEntries(dyadic_update, A_v, A_i));
+      PetscCallVoid(MatIterateAllEntries(dyadic_update, A_v, A_i));
     }
 
     PetscCallVoid(x_i.freeAdjoint(&x_b));
@@ -657,7 +657,7 @@ struct ADData_MatNorm : public ReverseDataBase<ADData_MatNorm> {
           }
         }
       };
-      PetscObjectIterateAllEntries(func, x_v, x_i);
+      MatIterateAllEntries(func, x_v, x_i);
     }
     else if(type == NORM_FROBENIUS) {
       auto func = [&](PetscInt row, PetscInt col, Real& value, Identifier& id) {
@@ -667,7 +667,7 @@ struct ADData_MatNorm : public ReverseDataBase<ADData_MatNorm> {
           }
         }
       };
-      PetscObjectIterateAllEntries(func, x_v, x_i);
+      MatIterateAllEntries(func, x_v, x_i);
     }
     else {
       // TODO: Throw error
@@ -735,7 +735,7 @@ PetscErrorCode MatZeroEntries(ADMat mat) {
   auto func = [&] (PetscInt row, PetscInt col, Wrapper& value) {
     value = Real();
   };
-  return PetscObjectIterateAllEntries(func, mat);
+  return MatIterateAllEntries(func, mat);
 }
 
 PetscErrorCode MatSeqAIJGetEntrySize(Mat mat, PetscInt* entries) {
@@ -794,7 +794,7 @@ void ADMatIsActive(ADMat mat, bool* a) {
   auto func = [&](PetscInt row, PetscInt col, Wrapper& value) {
     active += tape.isIdentifierActive(value.getIdentifier());
   };
-  PetscCallVoid(PetscObjectIterateAllEntries(func, mat));
+  PetscCallVoid(MatIterateAllEntries(func, mat));
 
   MPI_Comm comm;
   PetscCallVoid(PetscObjectGetComm((PetscObject)mat->mat, &comm));
@@ -865,14 +865,14 @@ PetscErrorCode ADMatDebugOutputImpl(Mat mat_v, ADMatData* mat_i, std::string m, 
             data.push_back(MatrixEntry({row, col, value, id}));
           };
 
-          PetscObjectIterateAllEntries(func, mat_v, mat_i);
+          MatIterateAllEntries(func, mat_v, mat_i);
         } else {
           out << "Rank: " << cur_rank << " dim: " << cur_dim <<"\n";
           auto func = [&](PetscInt row, PetscInt col, Real& value, Identifier& id) {
             data.push_back(MatrixEntry({row, col, vi->getAdjoint(id, cur_dim), id}));
           };
 
-          PetscObjectIterateAllEntries(func, mat_v, mat_i);
+          MatIterateAllEntries(func, mat_v, mat_i);
         }
 
         std::sort(data.begin(), data.end());

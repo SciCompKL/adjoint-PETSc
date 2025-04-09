@@ -57,7 +57,7 @@ PetscErrorCode MatGetColumnSumAbs(Mat mat, PetscScalar y[]) {
   auto func = [&] (PetscInt row, PetscInt col, PetscScalar& value) {
     y[col] += abs(value);
   };
-  PetscObjectIterateAllEntries(func, mat);
+  MatIterateAllEntries(func, mat);
 
   MPI_Comm comm;
   PetscCall(PetscObjectGetComm((PetscObject)mat, &comm));

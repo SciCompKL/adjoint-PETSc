@@ -239,9 +239,8 @@ namespace iterator_implementation {
   inline Mat getUnderlyingMat(ADMat mat) { return mat->mat; }
 }
 
-// TODO: Rename functions.
 template<typename Func, typename First, typename ... Other>
-PetscErrorCode PetscObjectIterateAllEntries(Func&& func, First&& mat, Other&& ... other) {
+PetscErrorCode MatIterateAllEntries(Func&& func, First&& mat, Other&& ... other) {
   // TODO: Check matrix type and select iterator
 
   return iterator_implementation::iterateMatAIJ(
@@ -253,7 +252,7 @@ PetscErrorCode PetscObjectIterateAllEntries(Func&& func, First&& mat, Other&& ..
 }
 
 template<typename Func, typename First, typename ... Other>
-PetscErrorCode ADMatAccessValue(Func&& func, PetscInt row, PetscInt col, First&& mat, Other&& ... other) {
+PetscErrorCode MatAccessValue(Func&& func, PetscInt row, PetscInt col, First&& mat, Other&& ... other) {
   // TODO: Check matrix type and select iterator
 
   return iterator_implementation::accessMatAIJ(
