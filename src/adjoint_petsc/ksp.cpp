@@ -110,17 +110,12 @@ struct ADData_KSPSolve : public ReverseDataBase<ADData_KSPSolve> {
   }
 
   void reverse(Tape* tape, VectorInterface* vi) {
-    PetscInt low;
 
-    Vec x_b;
-    Vec b_b;
     Mat A_b;
 
-    PetscCallVoid(x_i.createAdjoint(&x_b, 1));
-    PetscCallVoid(b_i.createAdjoint(&b_b, 1));
+    PetscCallVoid(x_i.createAdjoint());
+    PetscCallVoid(b_i.createAdjoint());
     PetscCallVoid(MatDuplicate(A_v, MAT_SHARE_NONZERO_PATTERN, &A_b));
-
-    PetscCallVoid(VecGetOwnershipRange(b_b, &low, nullptr));
 
     PetscCallVoid(KSPSetOperators(*ksp.get(), A_v, P_v));
 
@@ -132,7 +127,7 @@ struct ADData_KSPSolve : public ReverseDataBase<ADData_KSPSolve> {
 
       Real entry_b_b;
       Real entry_x_v;
-      PetscCallVoid(VecGetValues(b_b, 1, &row, &entry_b_b));
+      PetscCallVoid(VecGetValues(b_i.getVec(), 1, &row, &entry_b_b));
       PetscCallVoid(x_dyadic.getValue(x_v, col, &entry_x_v));
 
       if( tape->isIdentifierActive(id)) {
@@ -140,18 +135,18 @@ struct ADData_KSPSolve : public ReverseDataBase<ADData_KSPSolve> {
       }
     };
     for(; cur_dim < dim; cur_dim += 1) {
-      x_i.getAdjoint(x_b, vi, cur_dim);
+      x_i.getAdjoint(vi, cur_dim);
 
-      PetscCallVoid(KSPSolveTranspose(*ksp.get(), x_b, b_b));
-      b_i.updateAdjoint(b_b, vi, cur_dim);
+      PetscCallVoid(KSPSolveTranspose(*ksp.get(), x_i.getVec(), b_i.getVec()));
+      b_i.updateAdjoint(vi, cur_dim);
 
       if(A_i != nullptr) {
         PetscCallVoid(MatIterateAllEntries(dyadic_update, A_v, A_i));
       }
     }
 
-    PetscCallVoid(x_i.freeAdjoint(&x_b));
-    PetscCallVoid(b_i.freeAdjoint(&b_b));
+    PetscCallVoid(x_i.freeAdjoint());
+    PetscCallVoid(b_i.freeAdjoint());
 
     PetscCallVoid(MatDestroy(&A_b));
   }

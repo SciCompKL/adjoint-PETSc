@@ -6,48 +6,55 @@
 
 AP_NAMESPACE_START
 
-AdjointVecData::AdjointVecData(ADVec vec) : ids(vec->ad_size), global_size(0), createFunc(vec->createFunc), initFunc(vec->initFunc) {
-  std::copy(vec->ad_data, &vec->ad_data[vec->ad_size], ids.begin());
+AdjointVecData::AdjointVecData(ADVec vec) : ids(vec->vec_i->clone()), global_size(0), createFunc(vec->createFunc), initFunc(vec->initFunc) {
   PetscCallVoid(VecGetSize(vec->vec, &global_size));
 }
 
+AdjointVecData::~AdjointVecData() {
+  delete ids;
+}
 
-PetscErrorCode AdjointVecData::createAdjoint(Vec* vec_b, PetscInt dimSize) {
-  PetscCall(createFunc(vec_b));
-  PetscCall(initFunc(*vec_b));
-  PetscCall(VecSetSizes(*vec_b, ids.size() * dimSize, global_size * dimSize));
+
+PetscErrorCode AdjointVecData::createAdjoint() {
+  PetscCall(createFunc(&adjoint));
+  PetscCall(initFunc(adjoint));
+  PetscCall(VecSetSizes(adjoint, ids->getArraySize(), global_size));
 
   return PETSC_SUCCESS;
 }
 
-PetscErrorCode AdjointVecData::freeAdjoint(Vec* vec_b) {
-  PetscCall(VecDestroy(vec_b));
+PetscErrorCode AdjointVecData::freeAdjoint() {
+  PetscCall(VecDestroy(&adjoint));
 
   return PETSC_SUCCESS;
 }
 
-PetscErrorCode AdjointVecData::getAdjoint(Vec vec_b, VectorInterface* vi, PetscInt dim) {
+PetscErrorCode AdjointVecData::getAdjoint( VectorInterface* vi, PetscInt dim) {
 
-  PetscCall(getAdjointNoReset(vec_b, vi, dim));
+  PetscCall(getAdjointNoReset(vi, dim));
 
+
+  Identifier* data = ids->getArray();
+  int         data_size = ids->getArraySize();
   // Reset afterwards since ids can contain duplicates.
-  for(size_t i = 0; i < ids.size(); i += 1) {
-    vi->resetAdjoint(ids[i], dim);
+  for(int i = 0; i < data_size; i += 1) {
+    vi->resetAdjoint(data[i], dim);
   }
+  ids->restoreArray(data);
 
   return PETSC_SUCCESS;
 }
 
-PetscErrorCode AdjointVecData::getAdjointNoReset(Vec vec_b, VectorInterface* vi, PetscInt dim) {
+PetscErrorCode AdjointVecData::getAdjointNoReset(VectorInterface* vi, PetscInt dim) {
   auto func = [&](PetscInt AP_U(row), Real& value, Identifier id) {
     value = vi->getAdjoint(id, dim);
   };
-  PetscCall(VecIterateAllEntries(func, vec_b, ids.data()));
+  PetscCall(VecIterateAllEntries(func, adjoint, ids));
 
   return PETSC_SUCCESS;
 }
 
-PetscErrorCode AdjointVecData::updateAdjoint(Vec vec_b, VectorInterface* vi, PetscInt dim) {
+PetscErrorCode AdjointVecData::updateAdjoint(VectorInterface* vi, PetscInt dim) {
   Tape& tape = Number::getTape();
 
   auto func = [&](PetscInt AP_U(row), Real& value, Identifier id) {
@@ -55,9 +62,13 @@ PetscErrorCode AdjointVecData::updateAdjoint(Vec vec_b, VectorInterface* vi, Pet
         vi->updateAdjoint(id, dim, value);
     }
   };
-  PetscCall(VecIterateAllEntries(func, vec_b, ids.data()));
+  PetscCall(VecIterateAllEntries(func, adjoint, ids));
 
   return PETSC_SUCCESS;
+}
+
+Vec AdjointVecData::getVec() {
+  return adjoint;
 }
 
 AP_NAMESPACE_END

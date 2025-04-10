@@ -38,20 +38,25 @@ struct ReverseDataBase {
   }
 };
 
+
 struct AdjointVecData {
-  std::vector<Identifier> ids;
+  ADVecData* ids;
+  Vec        adjoint;
 
   PetscInt   global_size;
   FuncCreate createFunc;
   FuncInit   initFunc;
 
   AdjointVecData(ADVec vec);
+  ~AdjointVecData();
 
-  PetscErrorCode createAdjoint(Vec* vec_b, PetscInt dimSize);
-  PetscErrorCode freeAdjoint(Vec* vec_b);
-  PetscErrorCode getAdjoint(Vec vec_b, VectorInterface* vi, PetscInt dim);
-  PetscErrorCode getAdjointNoReset(Vec vec_b, VectorInterface* vi, PetscInt dim);
-  PetscErrorCode updateAdjoint(Vec vec_b, VectorInterface* vi, PetscInt dim);
+  PetscErrorCode createAdjoint();
+  PetscErrorCode freeAdjoint();
+  PetscErrorCode getAdjoint(VectorInterface* vi, PetscInt dim);
+  PetscErrorCode getAdjointNoReset(VectorInterface* vi, PetscInt dim);
+  PetscErrorCode updateAdjoint(VectorInterface* vi, PetscInt dim);
+
+  Vec            getVec();
 };
 
 AP_NAMESPACE_END

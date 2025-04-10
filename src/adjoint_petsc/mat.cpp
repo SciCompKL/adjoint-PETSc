@@ -507,11 +507,9 @@ struct ADData_MatMult : public ReverseDataBase<ADData_MatMult> {
   }
 
   void reverse(Tape* tape, VectorInterface* vi) {
-    Vec x_b;
-    Vec y_b;
     Mat A_b;
-    PetscCallVoid(x_i.createAdjoint(&x_b, 1));
-    PetscCallVoid(y_i.createAdjoint(&y_b, 1));
+    PetscCallVoid(x_i.createAdjoint());
+    PetscCallVoid(y_i.createAdjoint());
     PetscCallVoid(MatDuplicate(A_v, MAT_SHARE_NONZERO_PATTERN, &A_b));
 
     DyadicProductHelper dyadic = {};
@@ -525,7 +523,7 @@ struct ADData_MatMult : public ReverseDataBase<ADData_MatMult> {
     auto dyadic_update = [&] (PetscInt row, PetscInt col, Real& AP_U(value), Identifier& id) {
       Real entry_y_b;
       Real entry_x_v;
-      PetscCallVoid(VecGetValues(y_b, 1, &row, &entry_y_b));
+      PetscCallVoid(VecGetValues(y_i.getVec(), 1, &row, &entry_y_b));
       PetscCallVoid(dyadic.getValue(x_v, col, &entry_x_v));
 
       if(tape->isIdentifierActive(id)) {
@@ -534,16 +532,16 @@ struct ADData_MatMult : public ReverseDataBase<ADData_MatMult> {
     };
 
     for(; cur_dim < dim; cur_dim += 1) {
-      y_i.getAdjoint(y_b, vi, cur_dim);
+      y_i.getAdjoint(vi, cur_dim);
 
-      PetscCallVoid(MatMultTranspose(A_v, y_b, x_b));
-      x_i.updateAdjoint(x_b, vi, cur_dim);
+      PetscCallVoid(MatMultTranspose(A_v, y_i.getVec(), x_i.getVec()));
+      x_i.updateAdjoint(vi, cur_dim);
 
       PetscCallVoid(MatIterateAllEntries(dyadic_update, A_v, A_i));
     }
 
-    PetscCallVoid(x_i.freeAdjoint(&x_b));
-    PetscCallVoid(y_i.freeAdjoint(&y_b));
+    PetscCallVoid(x_i.freeAdjoint());
+    PetscCallVoid(y_i.freeAdjoint());
 
     PetscCallVoid(MatDestroy(&A_b));
   }
@@ -797,7 +795,9 @@ void ADMatCreateADData(ADMat mat) {
 
 void ADMatCopyForReverse(ADMat mat, Mat* newm, ADMatData** newd) {
 
-  PetscCallVoid(MatDuplicate(mat->mat, MAT_COPY_VALUES, newm));
+  if(nullptr != newm) {
+    PetscCallVoid(MatDuplicate(mat->mat, MAT_COPY_VALUES, newm));
+  }
 
   if(nullptr != newd) {
     *newd = mat->mat_i->clone();

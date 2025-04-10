@@ -11,11 +11,30 @@ AP_NAMESPACE_START
 using FuncCreate = std::function<PetscErrorCode(Vec* vec)>;
 using FuncInit   = std::function<PetscErrorCode(Vec vec)>;
 
+struct ADVecData {
+
+  int type;
+
+  ADVecData(int type);
+  ADVecData(ADVecData const&) = default;
+
+  virtual ~ADVecData() {};
+  virtual ADVecData* clone() = 0;
+
+  virtual Identifier* getArray() = 0;
+  virtual int         getArraySize() = 0;
+  virtual void        restoreArray(Identifier* ids) = 0;
+
+
+  void checkType(int castType);
+};
+
+
 struct ADVecImpl {
   Vec vec;
 
-  Identifier* ad_data;
-  int ad_size;
+  ADVecData* vec_i;
+
   void* transaction_data;
 
   FuncCreate createFunc;
@@ -65,11 +84,10 @@ PetscErrorCode VecWAXPY             (ADVec w, Number alpha, ADVec x, ADVec y);
  * AD specific functions
  */
 
+void ADVecCopyForReverse(ADVec vec, Vec* newv, ADVecData** newd);
 void ADVecCreateADData(ADVec vec);
 void ADVecIsActive    (ADVec vec, bool* a);
 
-PetscErrorCode ADVecExtractIdentifier(ADVec vec, Identifier* vec_i);
-PetscErrorCode ADVecExtractPrimal(ADVec vec, Real* vec_p);
 PetscErrorCode ADVecMakePassive(ADVec vec);
 PetscErrorCode ADVecRegisterExternalFunctionOutput(ADVec vec);
 

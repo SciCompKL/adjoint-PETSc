@@ -31,6 +31,10 @@ struct WrapperArray {
     Real* getValues() {
       return values_;
     }
+
+    Identifier* getIdentifiers() {
+      return identifiers_;
+    }
 };
 
 AP_NAMESPACE_END

@@ -2,25 +2,27 @@
 
 #include <adjoint_petsc/vec.h>
 
+#include "../impl/ad_vec_data.h"
+
 AP_NAMESPACE_START
 
 namespace iterator_implementation {
   template<typename T, typename = void>
-  struct VecValueAccess {
+  struct VecMPIValueAccess {
 
     T& value(PetscInt offset);
   };
 
   template<>
-  struct VecValueAccess<Vec> {
+  struct VecMPIValueAccess<Vec> {
     Vec vec;
     Real* values;
 
-    VecValueAccess(Vec vec) : vec(vec), values(nullptr) {
+    VecMPIValueAccess(Vec vec) : vec(vec), values(nullptr) {
       PetscCallVoid(VecGetArray(vec, &values));
     }
 
-    ~VecValueAccess() {
+    ~VecMPIValueAccess() {
       PetscCallVoid(VecRestoreArray(vec, &values));
     }
 
@@ -28,17 +30,17 @@ namespace iterator_implementation {
   };
 
   template<>
-  struct VecValueAccess<ADVec> {
+  struct VecMPIValueAccess<ADVec> {
     ADVec vec;
     WrapperArray values;
 
     std::array<char, sizeof(Wrapper)> wrapper;
 
-    VecValueAccess(ADVec vec) : vec(vec), values() {
+    VecMPIValueAccess(ADVec vec) : vec(vec), values() {
       PetscCallVoid(VecGetArray(vec, &values));
     }
 
-    ~VecValueAccess() {
+    ~VecMPIValueAccess() {
       PetscCallVoid(VecRestoreArray(vec, &values));
     }
 
@@ -52,16 +54,21 @@ namespace iterator_implementation {
   };
 
   template<>
-  struct VecValueAccess<Identifier*> {
+  struct VecMPIValueAccess<ADVecData*> {
+    ADVecData* data;
     Identifier* ids;
 
-    VecValueAccess(Identifier* ids) : ids(ids) {}
+    VecMPIValueAccess(ADVecData* data) : data(data), ids(data->getArray()) {}
+
+    ~VecMPIValueAccess() {
+      data->restoreArray(ids);
+    }
 
     Identifier& value(PetscInt offset) { return ids[offset]; }
   };
 
   template<typename Func, typename ... Values>
-  PetscErrorCode iterateVecAll(Func&& func, Vec vec, VecValueAccess<Values>&& ... values) {
+  PetscErrorCode iterateVecAll(Func&& func, Vec vec, VecMPIValueAccess<Values>&& ... values) {
 
     PetscInt low;
     PetscInt high;
@@ -77,7 +84,7 @@ namespace iterator_implementation {
   }
 
   template<typename Func, typename ... Values>
-  PetscErrorCode iterateVecIndexSet(Func&& func, PetscInt n, PetscInt const* ix, Vec vec, VecValueAccess<Values>&& ... values) {
+  PetscErrorCode iterateVecIndexSet(Func&& func, PetscInt n, PetscInt const* ix, Vec vec, VecMPIValueAccess<Values>&& ... values) {
 
     PetscInt low;
     PetscCall(VecGetOwnershipRange(vec, &low, nullptr));
@@ -94,28 +101,39 @@ namespace iterator_implementation {
 
 template<typename Func, typename First, typename ... Other>
 PetscErrorCode VecIterateAllEntries(Func&& func, First&& vec, Other&& ... other) {
-  // TODO: Check vector type and select iterator
+  ADVecType type = ADVecGetADType(vec);
 
-  return iterator_implementation::iterateVecAll(
-      func,
-      iterator_implementation::getUnderlyingVec(std::forward<First>(vec)),
-      iterator_implementation::VecValueAccess<std::remove_cvref_t<First>>(std::forward<First>(vec)),
-      iterator_implementation::VecValueAccess<std::remove_cvref_t<Other>>(std::forward<Other>(other))...
-    );
+  if(ADVecType::VecMPI == type) {
+    return iterator_implementation::iterateVecAll(
+        func,
+        iterator_implementation::getUnderlyingVec(std::forward<First>(vec)),
+        iterator_implementation::VecMPIValueAccess<std::remove_cvref_t<First>>(std::forward<First>(vec)),
+        iterator_implementation::VecMPIValueAccess<std::remove_cvref_t<Other>>(std::forward<Other>(other))...
+      );
+  }
+  else {
+    return PETSC_ERR_ARG_WRONGSTATE;
+  }
+
 }
 
 template<typename Func, typename First, typename ... Other>
 PetscErrorCode VecIterateIndexSet(Func&& func, PetscInt n, PetscInt const* ix, First&& vec, Other&& ... other) {
-  // TODO: Check vector type and select iterator
+  ADVecType type = ADVecGetADType(vec);
 
-  return iterator_implementation::iterateVecIndexSet(
-      func,
-      n,
-      ix,
-      iterator_implementation::getUnderlyingVec(std::forward<First>(vec)),
-      iterator_implementation::VecValueAccess<std::remove_cvref_t<First>>(std::forward<First>(vec)),
-      iterator_implementation::VecValueAccess<std::remove_cvref_t<Other>>(std::forward<Other>(other))...
-      );
+  if(ADVecType::VecMPI == type) {
+    return iterator_implementation::iterateVecIndexSet(
+        func,
+        n,
+        ix,
+        iterator_implementation::getUnderlyingVec(std::forward<First>(vec)),
+        iterator_implementation::VecMPIValueAccess<std::remove_cvref_t<First>>(std::forward<First>(vec)),
+        iterator_implementation::VecMPIValueAccess<std::remove_cvref_t<Other>>(std::forward<Other>(other))...
+        );
+  }
+  else {
+    return PETSC_ERR_ARG_WRONGSTATE;
+  }
 }
 
 AP_NAMESPACE_END

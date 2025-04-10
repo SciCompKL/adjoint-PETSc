@@ -2,6 +2,7 @@
 #include <adjoint_petsc/vec.h>
 #include <adjoint_petsc/util/petsc_missing.h>
 
+#include "impl/ad_vec_data.h"
 #include "util/addata_helper.hpp"
 #include "util/exception.hpp"
 #include "util/vec_iterator_util.hpp"
@@ -282,7 +283,7 @@ PetscErrorCode VecDestroy(ADVec* vec) {
   };
   PetscCall(VecIterateAllEntries(func, *vec));
 
-  delete [] (*vec)->ad_data;
+  delete (*vec)->vec_i;
 
   PetscCall(VecDestroy(&(*vec)->vec));
 
@@ -295,19 +296,22 @@ struct ADData_VecDot : public ReverseDataBase<ADData_VecDot> {
   MPI_Comm comm;
   Identifier val_i;
 
-  std::vector<Identifier> x_i;
-  std::vector<Real> x_v;
+  Vec        x_v;
+  ADVecData* x_i;
+  Vec        y_v;
+  ADVecData* y_i;
 
-  std::vector<Identifier> y_i;
-  std::vector<Real> y_v;
-
-  ADData_VecDot(ADVec x, ADVec y, Number* val) : comm(MPI_COMM_NULL), val_i(val->getIdentifier()), x_i(x->ad_size),
-      x_v(x->ad_size), y_i(x->ad_size), y_v(x->ad_size) {
+  ADData_VecDot(ADVec x, ADVec y, Number* val) : comm(MPI_COMM_NULL), val_i(val->getIdentifier()) {
+    ADVecCopyForReverse(x, &x_v, &x_i);
+    ADVecCopyForReverse(y, &y_v, &y_i);
     PetscCallVoid(PetscObjectGetComm((PetscObject)x->vec, &comm));
-    PetscCallVoid(ADVecExtractIdentifier(x, x_i.data()));
-    PetscCallVoid(ADVecExtractPrimal(x, x_v.data()));
-    PetscCallVoid(ADVecExtractIdentifier(y, y_i.data()));
-    PetscCallVoid(ADVecExtractPrimal(y, y_v.data()));
+  }
+
+  ~ADData_VecDot() {
+    PetscCallVoid(VecDestroy(&x_v));
+    PetscCallVoid(VecDestroy(&y_v));
+    delete x_i;
+    delete y_i;
   }
 
   void reverse(Tape* tape, VectorInterface* vi) {
@@ -321,13 +325,13 @@ struct ADData_VecDot : public ReverseDataBase<ADData_VecDot> {
     vi->resetAdjointVec(val_i);
 
     MPI_Allreduce(MPI_IN_PLACE, adj.data(), dim, MPI_DOUBLE, MPI_SUM, comm);
-
-    for(size_t i = 0; i < x_i.size(); i += 1) {
+    auto func = [&](PetscInt AP_U(row), PetscReal x_value, PetscReal y_value, Identifier x_id, Identifier y_id) {
       for(int d = 0; d < dim; d += 1) {
-        vi->updateAdjoint(x_i[i], d, y_v[i] * adj[d]);
-        vi->updateAdjoint(y_i[i], d, x_v[i] * adj[d]);
+        vi->updateAdjoint(x_id, d, y_value * adj[d]);
+        vi->updateAdjoint(y_id, d, x_value * adj[d]);
       }
-    }
+    };
+    VecIterateAllEntries(func, x_v, y_v, x_i, y_i);
   }
 };
 
@@ -364,7 +368,7 @@ PetscErrorCode VecDuplicate(ADVec vec, ADVec* newv) {
 PetscErrorCode VecGetArray(ADVec vec, WrapperArray* a) {
   Real* primals;
   PetscCall(VecGetArray(vec->vec, &primals));
-  *a = WrapperArray(primals, vec->ad_data);
+  *a = WrapperArray(primals, vec->vec_i->getArray());
 
   return PETSC_SUCCESS;
 }
@@ -404,7 +408,9 @@ struct ADData_VecMax : public ReverseDataBase<ADData_VecMax> {
       PetscCallVoid(VecGetOwnershipRange(x->vec, &low, &hight));
 
       if(low <= *p && *p < hight) {
-        x_i.push_back(x->ad_data[*p - low]);
+        Identifier* ids = x->vec_i->getArray();
+        x_i.push_back(ids[*p - low]);
+        x->vec_i->restoreArray(ids);
       }
     }
     else {
@@ -460,11 +466,11 @@ struct ADData_VecNorm : public ReverseDataBase<ADData_VecNorm> {
 
   NormType type;
 
-  std::vector<Real>       x_v;
-  std::vector<Identifier> x_i;
+  Vec        x_v;
+  ADVecData* x_i;
 
   ADData_VecNorm(ADVec x, NormType type, Number* val) : comm(MPI_COMM_NULL), val_i(), val_v(val->getValue()),
-      type(type), x_v(x->ad_size), x_i(x->ad_size) {
+      type(type) {
     PetscCallVoid(PetscObjectGetComm((PetscObject)x->vec, &comm));
 
 
@@ -473,8 +479,12 @@ struct ADData_VecNorm : public ReverseDataBase<ADData_VecNorm> {
       val_i[i] = val[i].getIdentifier();
     }
 
-    PetscCallVoid(ADVecExtractPrimal(x, x_v.data()));
-    PetscCallVoid(ADVecExtractIdentifier(x, x_i.data()));
+    ADVecCopyForReverse(x, &x_v, &x_i);
+  }
+
+  ~ADData_VecNorm() {
+    PetscCallVoid(VecDestroy(&x_v));
+    delete x_i;
   }
 
   void reverse(Tape* tape, VectorInterface* vi) {
@@ -497,27 +507,29 @@ struct ADData_VecNorm : public ReverseDataBase<ADData_VecNorm> {
 
       Real* adj_offset = adj.data() + pos * dim;
 
-      for(size_t i = 0; i < x_i.size(); i += 1) {
-        if( tape->isIdentifierActive(x_i[i])) {
-          Real jac = 2.0 * x_v[i];
+      auto func = [&] (PetscInt AP_U(row), PetscReal x_value, Identifier x_id) {
+        if( tape->isIdentifierActive(x_id)) {
+          Real jac = 2.0 * x_value;
           for(int d = 0; d < dim; d += 1) {
-            if( tape->isIdentifierActive(x_i[i])) {
-              vi->updateAdjoint(x_i[i], d, jac * adj_offset[d]);
+            if( tape->isIdentifierActive(x_id)) {
+              vi->updateAdjoint(x_id, d, jac * adj_offset[d]);
             }
           }
         }
-      }
+      };
+      VecIterateAllEntries(func, x_v, x_i);
     };
 
     if(type == NORM_1 || type == NORM_1_AND_2) {
-      for(size_t i = 0; i < x_i.size(); i += 1) {
-        if( tape->isIdentifierActive(x_i[i])) {
+      auto func = [&] (PetscInt AP_U(row), PetscReal x_value, Identifier x_id) {
+        if( tape->isIdentifierActive(x_id)) {
           for(int d = 0; d < dim; d += 1) {
-            if(x_v[i] < 0.0) { vi->updateAdjoint(x_i[i], d, -adj[d]); }
-            else if(x_v[i] > 0.0) { vi->updateAdjoint(x_i[i], d, adj[d]); }
+            if(x_value < 0.0) { vi->updateAdjoint(x_id, d, -adj[d]); }
+            else if(x_value > 0.0) { vi->updateAdjoint(x_id, d, adj[d]); }
           }
         }
-      }
+      };
+      VecIterateAllEntries(func, x_v, x_i);
 
       if(type == NORM_1_AND_2) {
         norm_2();
@@ -527,16 +539,17 @@ struct ADData_VecNorm : public ReverseDataBase<ADData_VecNorm> {
       norm_2();
     }
     else if(type == NORM_MAX) {
-      for(size_t i = 0; i < x_i.size(); i += 1) {
-        if( tape->isIdentifierActive(x_i[i])) {
-          if(abs(x_v[i]) == val_v) {
+      auto func = [&] (PetscInt AP_U(row), PetscReal x_value, Identifier x_id) {
+        if( tape->isIdentifierActive(x_id)) {
+          if(abs(x_value) == val_v) {
             for(int d = 0; d < dim; d += 1) {
-              if(x_v[i] < 0.0) { vi->updateAdjoint(x_i[i], d, -adj[d]); }
-              else if(x_v[i] > 0.0) { vi->updateAdjoint(x_i[i], d, adj[d]); }
+              if(x_value < 0.0) { vi->updateAdjoint(x_id, d, -adj[d]); }
+              else if(x_value > 0.0) { vi->updateAdjoint(x_id, d, adj[d]); }
             }
           }
         }
-      }
+      };
+      VecIterateAllEntries(func, x_v, x_i);
     }
     else {
       AP_EXCEPTION("Norm of kind %d not implemented.", (int)type);
@@ -597,6 +610,7 @@ PetscErrorCode VecPow(ADVec x, Number p) {
 PetscErrorCode VecRestoreArray  (ADVec vec, WrapperArray* a) {
   Real* primals = a->getValues();
   PetscCall(VecRestoreArray(vec->vec, &primals));
+  vec->vec_i->restoreArray(a->getIdentifiers());
 
   return PETSC_SUCCESS;
 }
@@ -693,11 +707,16 @@ struct ADData_VecSum : public ReverseDataBase<ADData_VecSum> {
   MPI_Comm comm;
   Identifier val_i;
 
-  std::vector<Identifier> x_i;
+  ADVecData* x_i;
 
-  ADData_VecSum(ADVec x, Number* val) : comm(MPI_COMM_NULL), val_i(val->getIdentifier()), x_i(x->ad_size) {
+
+  ADData_VecSum(ADVec x, Number* val) : comm(MPI_COMM_NULL), val_i(val->getIdentifier()) {
     PetscCallVoid(PetscObjectGetComm((PetscObject)x->vec, &comm));
-    PetscCallVoid(ADVecExtractIdentifier(x, x_i.data()));
+    ADVecCopyForReverse(x, nullptr, &x_i);
+  }
+
+  ~ADData_VecSum() {
+    delete x_i;
   }
 
   void reverse(Tape* tape, VectorInterface* vi) {
@@ -712,9 +731,12 @@ struct ADData_VecSum : public ReverseDataBase<ADData_VecSum> {
 
     MPI_Allreduce(MPI_IN_PLACE, adj.data(), dim, MPI_DOUBLE, MPI_SUM, comm);
 
-    for(size_t i = 0; i < x_i.size(); i += 1) {
-      vi->updateAdjointVec(x_i[i], adj.data());
+    int ids_size = x_i->getArraySize();
+    Identifier* ids = x_i->getArray();
+    for(int i = 0; i < ids_size; i += 1) {
+      vi->updateAdjointVec(ids[i], adj.data());
     }
+    x_i->restoreArray(ids);
   }
 };
 
@@ -751,18 +773,36 @@ PetscErrorCode VecWAXPY(ADVec w, Number alpha, ADVec x, ADVec y) {
  * AD specific functions
  */
 
+void ADVecCopyForReverse(ADVec vec, Vec* newv, ADVecData** newd) {
+
+  if(nullptr != newv) {
+    PetscCallVoid(VecDuplicate(vec->vec, newv));
+    PetscCallVoid(VecCopy(vec->vec, *newv));
+  }
+
+  if(nullptr != newd) {
+    *newd = vec->vec_i->clone();
+  }
+}
+
 void ADVecCreateADData(ADVec vec) {
 
   if(nullptr != vec->vec) {
 
-    VecGetLocalSize(vec->vec, &vec->ad_size);
+    ADVecType type = ADVecGetADType(vec->vec);
 
-    vec->ad_data = new Identifier[vec->ad_size];
-    memset(vec->ad_data, 0, vec->ad_size * sizeof(Identifier));
+    if(ADVecType::VecMPI == type) {
+      PetscInt size;
+      VecGetLocalSize(vec->vec, &size);
+
+      vec->vec_i = new ADVecLocalData(size);
+    }
+    else {
+      AP_EXCEPTION("Unsupported vector type %d.", (int)type);
+    }
   }
   else {
-    vec->ad_data = nullptr;
-    vec->ad_size = 0;
+    vec->vec_i = nullptr;
   }
 }
 
@@ -780,21 +820,6 @@ void ADVecIsActive(ADVec vec, bool* a) {
 
   MPI_Allreduce(MPI_IN_PLACE, &active, 1, MPI_INTEGER, MPI_SUM, comm);
   *a = 0 != active;
-}
-
-PetscErrorCode ADVecExtractIdentifier(ADVec vec, Identifier* vec_i) {
-  std::copy(vec->ad_data, &vec->ad_data[vec->ad_size], vec_i);
-
-  return PETSC_SUCCESS;
-}
-
-PetscErrorCode ADVecExtractPrimal(ADVec vec, Real* vec_p) {
-  Real* values;
-  PetscCall(VecGetArray(vec->vec, &values));
-  std::copy(values, &values[vec->ad_size], vec_p);
-  PetscCall(VecRestoreArray(vec->vec, &values));
-
-  return PETSC_SUCCESS;
 }
 
 PetscErrorCode ADVecMakePassive(ADVec vec) {
@@ -823,7 +848,7 @@ PetscErrorCode ADVecRegisterExternalFunctionOutput(ADVec vec) {
  * Debug functions
  */
 
-PetscErrorCode ADVecDebugOutputImpl(Vec vec_v, Identifier* vec_i, std::string m, int id, bool forward, VectorInterface* vi, AdjointVecData* vec_data) {
+PetscErrorCode ADVecDebugOutputImpl(Vec vec_v, ADVecData* vec_i, std::string m, int id, bool forward, VectorInterface* vi, AdjointVecData* vec_data) {
   std::ostream& out = ADPetscOptionsGetDebugOutputStream();
   out.setf(std::ios::scientific);
   out.setf(std::ios::showpos);
@@ -859,7 +884,7 @@ PetscErrorCode ADVecDebugOutputImpl(Vec vec_v, Identifier* vec_i, std::string m,
           out << "Rank: " << cur_rank << "\n";
         } else {
           out << "Rank: " << cur_rank << " dim: " << cur_dim <<"\n";
-          vec_data->getAdjointNoReset(vec_v, vi, cur_dim);
+          vec_data->getAdjointNoReset(vi, cur_dim);  // vec_v is the vector behind vec_data.
         }
         auto func = [&](PetscInt row, Real& value, Identifier& id) {
           (void)row;
@@ -889,16 +914,15 @@ struct ADData_VecDebugOutput : public ReverseDataBase<ADData_VecDebugOutput> {
 
 
   void reverse(Tape* AP_U(tape), VectorInterface* vi) {
-    Vec vec_b;
-    PetscCallVoid(vec_i.createAdjoint(&vec_b, 1));
-    PetscCallVoid(ADVecDebugOutputImpl(vec_b, vec_i.ids.data(), m, id, false, vi, &vec_i));
-    PetscCallVoid(vec_i.freeAdjoint(&vec_b));
+    PetscCallVoid(vec_i.createAdjoint());
+    PetscCallVoid(ADVecDebugOutputImpl(vec_i.getVec(), vec_i.ids, m, id, false, vi, &vec_i));
+    PetscCallVoid(vec_i.freeAdjoint());
   }
 };
 
 void ADVecDebugOutput(ADVec vec, std::string m, int id) {
   if(ADPetscOptionsGetDebugOutputPrimal()) {
-    ADVecDebugOutputImpl(vec->vec, vec->ad_data, m, id, true, nullptr, nullptr);
+    ADVecDebugOutputImpl(vec->vec, vec->vec_i, m, id, true, nullptr, nullptr);
   }
   if(ADPetscOptionsGetDebugOutputReverse()) {
     ADData_VecDebugOutput* data = new ADData_VecDebugOutput(vec, m, id);
