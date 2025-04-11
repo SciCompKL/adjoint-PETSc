@@ -39,6 +39,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CoDiPack_DIR  ${CMAKE_CURRENT_SOURCE_DIR}/codipack/cmake CACHE PATH "Path to CoDiPack cmake files.")
 set(PETSc_DIR     Not_Defined CACHE PATH "Path to petsc")
 
+option(BUILD_EXAMPLES    "Build examples"               ON)
 option(BUILD_SHARED_LIBS "Build using shared libraries" ON)
 
 find_package(CoDiPack CONFIG REQUIRED)
@@ -78,6 +79,9 @@ target_link_directories(adjoint_petsc INTERFACE ${PETSc_DIR}/lib)
 
 install(TARGETS adjoint_petsc FILE_SET api)
 
+if(BUILD_EXAMPLES)
+  add_subdirectory(examples)
+endif()
 if(BUILD_TESTING)
   add_subdirectory(tests)
 endif()
