@@ -33,7 +33,7 @@ AP_NAMESPACE_START
 
 ADVecData::ADVecData(int type) : type(type) {}
 
-ADVecLocalData::ADVecLocalData(PetscInt size) : ADVecData(TYPE), index(size) {}
+ADVecLocalData::ADVecLocalData(PetscInt size, ADVecType type) : ADVecData((int)type), index(size) {}
 
 void ADVecData::checkType(int castType) {
   if(type != castType) {
@@ -46,7 +46,7 @@ ADVecLocalData* ADVecLocalData::clone() {
 }
 
 ADVecLocalData* ADVecLocalData::cast(ADVecData* d) {
-  d->checkType(TYPE);
+  // TODO: Enable check with proper conecpt for differnt vector types: d->checkType(TYPE);
 
   return dynamic_cast<ADVecLocalData*>(d);
 }
@@ -64,8 +64,21 @@ void ADVecLocalData::restoreArray(Identifier* AP_U(ids)) {
 }
 
 ADVecType ADVecDataPTypeToEnum(VecType ptype) {
-  if(0 == strcmp(ptype, "mpi")) {
-    return ADVecType::VecMPI;
+  if(0 == strcmp(ptype, VECSTANDARD)) {
+    int size;
+    MPI_Comm_size(PETSC_COMM_WORLD, &size);
+    if(1 == size) {
+      return ADVecType::ADVecSeq;
+    }
+    else {
+      return ADVecType::ADVecMPI;
+    }
+  }
+  else if(0 == strcmp(ptype, VECSEQ)) {
+    return ADVecType::ADVecSeq;
+  }
+  else if(0 == strcmp(ptype, VECMPI)) {
+    return ADVecType::ADVecMPI;
   }
   else {
     return ADVecType::NONE;

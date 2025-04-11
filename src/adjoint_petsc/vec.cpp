@@ -635,14 +635,13 @@ PetscErrorCode VecPow(ADVec x, Number p) {
   return VecIterateAllEntries(func, x);
 }
 
-PetscErrorCode VecRestoreArray  (ADVec vec, WrapperArray* a) {
+PetscErrorCode VecRestoreArray(ADVec vec, WrapperArray* a) {
   Real* primals = a->getValues();
   PetscCall(VecRestoreArray(vec->vec, &primals));
   vec->vec_i->restoreArray(a->getIdentifiers());
 
   return PETSC_SUCCESS;
 }
-
 
 PetscErrorCode VecScale(ADVec x, Number alpha) {
   // VecScale is purely local operation.
@@ -818,12 +817,11 @@ void ADVecCreateADData(ADVec vec) {
   if(nullptr != vec->vec) {
 
     ADVecType type = ADVecGetADType(vec->vec);
-
-    if(ADVecType::VecMPI == type) {
+    if(ADVecType::ADVecMPI == type || ADVecType::ADVecSeq == type) {
       PetscInt size;
       VecGetLocalSize(vec->vec, &size);
 
-      vec->vec_i = new ADVecLocalData(size);
+      vec->vec_i = new ADVecLocalData(size, type);
     }
     else {
       AP_EXCEPTION("Unsupported vector type %d.", (int)type);

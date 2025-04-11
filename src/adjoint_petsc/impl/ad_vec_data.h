@@ -36,16 +36,16 @@ AP_NAMESPACE_START
 
 enum class ADVecType {
   NONE = 0,
-  VecMPI
+  ADVecStandard, // Not used it is directly mapped to ADVecSeq or ADVecMPI
+  ADVecSeq,
+  ADVecMPI
 };
 
 struct ADVecLocalData : public ADVecData {
-  static int constexpr TYPE = (int)ADVecType::VecMPI;
-
   std::vector<Identifier> index;
 
   ADVecLocalData(ADVecLocalData const&) = default;
-  ADVecLocalData(PetscInt size);
+  ADVecLocalData(PetscInt size, ADVecType type);
 
   ADVecLocalData* clone() override;
 

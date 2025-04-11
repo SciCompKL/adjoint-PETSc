@@ -54,27 +54,37 @@ ADMatSeqAIJData* ADMatSeqAIJData::cast(ADMatData* d) {
 }
 
 
-ADMatAIJData::ADMatAIJData(PetscInt diag_size, PetscInt off_diag_size) :
+ADMatMPIAIJData::ADMatMPIAIJData(PetscInt diag_size, PetscInt off_diag_size) :
     ADMatData(TYPE),
     index_d(diag_size),
     index_o(off_diag_size) {}
 
-ADMatAIJData* ADMatAIJData::clone() {
-  return new ADMatAIJData(*this);
+ADMatMPIAIJData* ADMatMPIAIJData::clone() {
+  return new ADMatMPIAIJData(*this);
 }
 
-ADMatAIJData* ADMatAIJData::cast(ADMatData* d) {
+ADMatMPIAIJData* ADMatMPIAIJData::cast(ADMatData* d) {
   d->checkType(TYPE);
 
-  return dynamic_cast<ADMatAIJData*>(d);
+  return dynamic_cast<ADMatMPIAIJData*>(d);
 }
 
 ADMatType ADMatDataPTypeToEnum(MatType ptype) {
-  if(0 == strcmp(ptype, "mpiaij")) {
-    return ADMatType::MatAIJ;
+  if(0 == strcmp(ptype, MATAIJ)) {
+    int size;
+    MPI_Comm_size(PETSC_COMM_WORLD, &size);
+    if(1 == size) {
+      return ADMatType::ADMatSeqAIJ;
+    }
+    else {
+      return ADMatType::ADMatMPIAIJ;
+    }
   }
-  else if(0 == strcmp(ptype, "seqaij")) {
-    return ADMatType::MatAIJ;
+  else if(0 == strcmp(ptype, MATMPIAIJ)) {
+    return ADMatType::ADMatMPIAIJ;
+  }
+  else if(0 == strcmp(ptype, MATSEQAIJ)) {
+    return ADMatType::ADMatSeqAIJ;
   }
   else {
     return ADMatType::NONE;

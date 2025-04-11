@@ -36,13 +36,14 @@ AP_NAMESPACE_START
 
 enum class ADMatType {
   NONE = 0,
-  MatAIJ,
-  MatSeqAIJ
+  ADMatAIJ,    // Not used it is directly mapped to ADMatSeqMAIJ or ADMatMPIMAIJ
+  ADMatSeqAIJ,
+  ADMatMPIAIJ
 };
 
 
 struct ADMatSeqAIJData : public ADMatData {
-  static int constexpr TYPE = (int)ADMatType::MatSeqAIJ;
+  static int constexpr TYPE = (int)ADMatType::ADMatSeqAIJ;
 
   std::vector<Identifier> index;
 
@@ -52,20 +53,19 @@ struct ADMatSeqAIJData : public ADMatData {
   ADMatSeqAIJData* clone() override;
 
   static ADMatSeqAIJData* cast(ADMatData* d);
-
 };
 
-struct ADMatAIJData : public ADMatData {
-  static int constexpr TYPE = (int)ADMatType::MatAIJ;
+struct ADMatMPIAIJData : public ADMatData {
+  static int constexpr TYPE = (int)ADMatType::ADMatMPIAIJ;
   ADMatSeqAIJData index_d;
   ADMatSeqAIJData index_o;
 
-  ADMatAIJData(ADMatAIJData const&) = default;
-  ADMatAIJData(PetscInt diag_size, PetscInt off_diag_size);
+  ADMatMPIAIJData(ADMatMPIAIJData const&) = default;
+  ADMatMPIAIJData(PetscInt diag_size, PetscInt off_diag_size);
 
-  ADMatAIJData* clone() override;
+  ADMatMPIAIJData* clone() override;
 
-  static ADMatAIJData* cast(ADMatData* d);
+  static ADMatMPIAIJData* cast(ADMatData* d);
 };
 
 ADMatType ADMatDataPTypeToEnum(MatType ptype);

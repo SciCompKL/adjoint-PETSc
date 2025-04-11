@@ -154,7 +154,7 @@ namespace iterator_implementation {
 
       PetscCallVoid(MatMPIAIJGetSeqAIJ(mat->mat, &matd.mat, &mato.mat, nullptr));
 
-      ADMatAIJData* data = ADMatAIJData::cast(mat->mat_i);
+      ADMatMPIAIJData* data = ADMatMPIAIJData::cast(mat->mat_i);
       matd.mat_i = &data->index_d;
       mato.mat_i = &data->index_o;
     }
@@ -171,7 +171,7 @@ namespace iterator_implementation {
     MatAIJValueAccess() = default;
 
     MatAIJValueAccess(ADMatData* d) : MatAIJValueAccess() {
-      ADMatAIJData* data = ADMatAIJData::cast(d);
+      ADMatMPIAIJData* data = ADMatMPIAIJData::cast(d);
       datad = &data->index_d;
       datao = &data->index_o;
     }
@@ -273,7 +273,7 @@ template<typename Func, typename First, typename ... Other>
 PetscErrorCode MatIterateAllEntries(Func&& func, First&& mat, Other&& ... other) {
   ADMatType type = ADMatGetADType(mat);
 
-  if(ADMatType::MatAIJ == type) {
+  if(ADMatType::ADMatMPIAIJ == type) {
     return iterator_implementation::iterateMatAIJ(
         func,
         iterator_implementation::getUnderlyingMat(std::forward<First>(mat)),
@@ -281,7 +281,7 @@ PetscErrorCode MatIterateAllEntries(Func&& func, First&& mat, Other&& ... other)
         iterator_implementation::MatAIJValueAccess<std::remove_cvref_t<Other>>(std::forward<Other>(other))...
       );
   }
-  else if(ADMatType::MatSeqAIJ == type) {
+  else if(ADMatType::ADMatSeqAIJ == type) {
     return iterator_implementation::iterateMatSeqAIJI(
         func,
         iterator_implementation::getUnderlyingMat(std::forward<First>(mat)),
@@ -299,7 +299,7 @@ template<typename Func, typename First, typename ... Other>
 PetscErrorCode MatAccessValue(Func&& func, PetscInt row, PetscInt col, First&& mat, Other&& ... other) {
   ADMatType type = ADMatGetADType(mat);
 
-  if(ADMatType::MatAIJ == type) {
+  if(ADMatType::ADMatMPIAIJ == type) {
     return iterator_implementation::accessMatAIJ(
         func,
         row,
@@ -309,7 +309,7 @@ PetscErrorCode MatAccessValue(Func&& func, PetscInt row, PetscInt col, First&& m
         iterator_implementation::MatAIJValueAccess<std::remove_cvref_t<Other>>(std::forward<Other>(other))...
       );
   }
-  else if(ADMatType::MatSeqAIJ == type) {
+  else if(ADMatType::ADMatSeqAIJ == type) {
     return iterator_implementation::accessMatSeqAIJ(
         func,
         row,

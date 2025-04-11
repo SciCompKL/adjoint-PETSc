@@ -782,7 +782,7 @@ PetscErrorCode MatSeqAIJGetEntrySize(Mat mat, PetscInt* entries) {
   return PETSC_SUCCESS;
 }
 
-PetscErrorCode MatAIJGetEntrySize(Mat mat, PetscInt* diag_entries, PetscInt* off_diag_entries) {
+PetscErrorCode MatMPIAIJGetEntrySize(Mat mat, PetscInt* diag_entries, PetscInt* off_diag_entries) {
   Mat matd;
   Mat mato;
   PetscInt const* colmap;
@@ -804,14 +804,14 @@ void ADMatCreateADData(ADMat mat) {
 
   ADMatType type = ADMatDataPTypeToEnum(ptype);
 
-  if(type == ADMatType::MatAIJ) {
+  if(type == ADMatType::ADMatMPIAIJ) {
     PetscInt diag_size;
     PetscInt off_diag_size;
 
-    PetscCallVoid(MatAIJGetEntrySize(mat->mat, &diag_size, &off_diag_size));
-    mat->mat_i = new ADMatAIJData(diag_size, off_diag_size);
+    PetscCallVoid(MatMPIAIJGetEntrySize(mat->mat, &diag_size, &off_diag_size));
+    mat->mat_i = new ADMatMPIAIJData(diag_size, off_diag_size);
   }
-  else if(type == ADMatType::MatSeqAIJ){
+  else if(type == ADMatType::ADMatSeqAIJ){
     PetscInt size;
 
     PetscCallVoid(MatSeqAIJGetEntrySize(mat->mat, &size));
