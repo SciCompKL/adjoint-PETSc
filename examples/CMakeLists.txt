@@ -30,4 +30,4 @@ cmake_minimum_required(VERSION 3.20)
 
 add_executable(hello_world.exe hello_world.cpp)
 
-target_link_libraries(hello_world.exe PUBLIC gtest adjoint_petsc)
+target_link_libraries(hello_world.exe PUBLIC adjoint_petsc)
