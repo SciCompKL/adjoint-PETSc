@@ -28,6 +28,11 @@
 
 #pragma once
 
+#define AP_MAJOR_VERSION 0
+#define AP_MINOR_VERSION 0
+#define AP_BUILD_VERSION 1
+#define AP_VERSION "0.0.1"
+
 #define AP_NAMESPACE adjoint_petsc
 #define AP_NAMESPACE_START namespace AP_NAMESPACE {
 #define AP_NAMESPACE_END }
