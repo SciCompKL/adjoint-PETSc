@@ -117,6 +117,50 @@ TEST_F(VecSetup, VecSetValuesSteps) {
   EXPECT_EQ(s[2].getGradient(), 103.0 + 10 * mpi_rank_next); // Adjoint from next rank.
 }
 
+TEST_F(VecSetup, VecSetValuesStepsInsert) {
+
+  // Always set 0 entry on first rank.
+  // Set the 1 entry on this rank.
+  // Set the 1 entry on this rank again.
+  std::array<PetscInt, 3> pos = {0, mpi_rank * ENTRIES_PER_RANK + 1, mpi_rank * ENTRIES_PER_RANK + 1};
+  PetscCallVoid(VecSetValues(vec[0], 1, &pos[0], &s[0], INSERT_VALUES));
+  PetscCallVoid(VecSetValues(vec[0], 1, &pos[1], &s[1], INSERT_VALUES));
+  PetscCallVoid(VecSetValues(vec[0], 1, &pos[2], &s[2], INSERT_VALUES));
+  PetscCallVoid(VecAssemblyBegin(vec[0]));
+  PetscCallVoid(VecAssemblyEnd(vec[0]));
+
+  adjoint_petsc::WrapperArray values = {};
+  PetscCallVoid(VecGetArray(vec[0], &values));
+
+  if(0 == mpi_rank) {
+    EXPECT_EQ(values[0].getValue(), mpi_rank_prev * 10 + 1);
+  }
+  else {
+    EXPECT_EQ(values[0].getValue(), 0.0);
+  }
+
+  EXPECT_EQ(values[1].getValue(), 3 + mpi_rank * 10);
+  EXPECT_EQ(values[2].getValue(), 0);
+
+  for(int i = 0; i < 3; i += 1) {
+    adjoint_petsc::Wrapper w = values[i];
+
+    if( tape->isIdentifierActive(w.getIdentifier())) {
+      tape->registerOutput(w);
+      w.setGradient(100 + 10 * mpi_rank + i + 1);
+    }
+  }
+
+  PetscCallVoid(VecRestoreArray(vec[0], &values));
+
+  evaluateTape();
+
+  // Only last rank gets the adjoint.
+  EXPECT_EQ(s[0].getGradient(), 101.0); // If multiple ranks set the same value, all get the adjoint. (It is not decidable who goes first.)
+  EXPECT_EQ(s[1].getGradient(), 0.0); // No adjoint (was overwritten)
+  EXPECT_EQ(s[2].getGradient(), 102.0 + 10 * mpi_rank); // Adjoint from own rank.
+}
+
 TEST_F(VecSetup, VecCopy) {
 
   adjoint_petsc::WrapperArray values = {};

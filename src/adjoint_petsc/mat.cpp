@@ -259,11 +259,17 @@ struct ADData_MatSetValues {
     int ad_vec_size = va->getVectorSize();
 
     data->adjoint_step -= 1;
-    int from = data->step_boundaries[data->adjoint_step];
-    int to = data->step_boundaries[data->adjoint_step + 1];
+    int from = data->step_boundaries[data->adjoint_step + 1];
+    int to = data->step_boundaries[data->adjoint_step];
 
-    for(int i = from; i < to; i += 1) {
+    for(int i = from - 1; i >= to; i -= 1) {
       va->updateAdjointVec(data->rhs_data[i].rhs_identifier, &data->adjoint_data[data->rhs_data[i].lhs_pos * ad_vec_size]);
+      if(INSERT_VALUES == data->mode) {
+        // Only the last (reverse the first) set variable gets the adjoint.
+        for(int dataPos = 0; dataPos < ad_vec_size; dataPos += 1) {
+          data->adjoint_data[data->rhs_data[i].lhs_pos * ad_vec_size + dataPos] = Real();
+        }
+      }
     }
 
     if(data->adjoint_step == 0) {
