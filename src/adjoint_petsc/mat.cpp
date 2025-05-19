@@ -400,12 +400,14 @@ PetscErrorCode MatAssemblyEnd(ADMat mat, MatAssemblyType type) {
 
   ADMatCreateADData(mat);
 
-  if(nullptr != mat->transaction_data) {
-    ADData_MatSetValues* data = reinterpret_cast<ADData_MatSetValues*>(mat->transaction_data);
-
-    data->finalize(mat);
-    mat->transaction_data = nullptr;
+  if(nullptr == mat->transaction_data) {
+    mat->transaction_data = new ADData_MatSetValues(INSERT_VALUES);
   }
+
+  ADData_MatSetValues* data = reinterpret_cast<ADData_MatSetValues*>(mat->transaction_data);
+
+  data->finalize(mat);
+  mat->transaction_data = nullptr;
 
   return PETSC_SUCCESS;
 }
@@ -805,6 +807,10 @@ PetscErrorCode MatMPIAIJGetEntrySize(Mat mat, PetscInt* diag_entries, PetscInt* 
  */
 
 void ADMatCreateADData(ADMat mat) {
+  if(mat->mat_i != nullptr) {
+    return;
+  }
+
   MatType ptype;
   PetscCallVoid(MatGetType(mat->mat, &ptype));
 

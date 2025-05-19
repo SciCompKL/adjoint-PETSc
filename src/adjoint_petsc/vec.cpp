@@ -225,6 +225,10 @@ struct ADData_SetValues {
     }
 
     VecDestroy(&adjoint_vec);
+
+    if(data->adjoint_step == 0) {
+      delete [] (data->adjoint_data);
+    }
   }
 
   static void no_delete(Tape* tape, void* data) {
@@ -277,12 +281,15 @@ PetscErrorCode VecAssemblyEnd  (ADVec vec) {
   if (nullptr != vec) {
     PetscErrorCode r = VecAssemblyEnd(vec->vec);
 
-    if(nullptr != vec->transaction_data) {
-      ADData_SetValues* data = reinterpret_cast<ADData_SetValues*>(vec->transaction_data);
-
-      data->finalize(vec);
-      vec->transaction_data = nullptr;
+    if(nullptr == vec->transaction_data) {
+      // On this process no SetValues method was called. Creeate a temporary one.
+      vec->transaction_data = new ADData_SetValues(INSERT_VALUES, vec);
     }
+
+    ADData_SetValues* data = reinterpret_cast<ADData_SetValues*>(vec->transaction_data);
+
+    data->finalize(vec);
+    vec->transaction_data = nullptr;
 
     return r;
   }
